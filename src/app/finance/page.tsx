@@ -3,6 +3,7 @@ import { accounts, journalEntries, journalLines, paymentAccounts } from "@/db/sc
 import { desc, eq } from "drizzle-orm";
 import { getFinancialStatements, recordBusinessExpense } from "@/server/services/finance";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,8 @@ export default async function FinancePage() {
   // Server action to record a business expense
   async function handleCreateExpense(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "FINANCE_MGR"]);
+
     const expenseAccountId = formData.get("expenseAccountId") as string;
     const paymentAccountId = formData.get("paymentAccountId") as string;
     const amount = Number(formData.get("amount"));
@@ -44,7 +47,7 @@ export default async function FinancePage() {
       amount,
       description,
       reference,
-      userId: undefined,
+      userId: user.id,
     });
 
     revalidatePath("/finance");

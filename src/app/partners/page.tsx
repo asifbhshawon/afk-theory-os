@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { partners, paymentAccounts } from "@/db/schema";
 import { getFinancialStatements, recordPartnerContribution, recordPartnerLoan } from "@/server/services/finance";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function PartnersPage() {
 
   async function handleRecordContribution(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "FINANCE_MGR"]);
     const partnerId = formData.get("partnerId") as string;
     const paymentAccountId = formData.get("paymentAccountId") as string;
     const amount = Number(formData.get("amount"));
@@ -26,7 +28,7 @@ export default async function PartnersPage() {
       paymentAccountId,
       amount,
       reference,
-      userId: undefined,
+      userId: user.id,
     });
 
     revalidatePath("/partners");
@@ -36,6 +38,7 @@ export default async function PartnersPage() {
 
   async function handleRecordLoan(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "FINANCE_MGR"]);
     const partnerId = formData.get("partnerId") as string;
     const paymentAccountId = formData.get("paymentAccountId") as string;
     const amount = Number(formData.get("amount"));
@@ -50,7 +53,7 @@ export default async function PartnersPage() {
       paymentAccountId,
       amount,
       reference,
-      userId: undefined,
+      userId: user.id,
     });
 
     revalidatePath("/partners");

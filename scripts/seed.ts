@@ -8,7 +8,18 @@ async function main() {
   console.log(`System initialized: ${initialized}`);
 
   console.log("Running initialization and partner provisioning...");
-  await initializeSystem();
+  const initResult = await initializeSystem();
+
+  if (initResult.credentials && initResult.credentials.length > 0) {
+    console.log("\n=======================================================");
+    console.log("  NEW PARTNER CREDENTIALS GENERATED (FIRST-RUN SETUP)");
+    console.log("  Store these credentials securely in your password manager!");
+    console.log("=======================================================");
+    initResult.credentials.forEach((c) => {
+      console.log(`Partner: ${c.name.padEnd(8)} | Email: ${c.email.padEnd(25)} | Temp Password: ${c.temporaryPassword}`);
+    });
+    console.log("=======================================================\n");
+  }
 
   const allRoles = await db.select().from(roles);
   const allAccounts = await db.select().from(accounts);

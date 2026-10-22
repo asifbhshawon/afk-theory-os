@@ -3,6 +3,7 @@ import { salesOrders, salesLines, productVariants, contacts, paymentAccounts } f
 import { desc, eq } from "drizzle-orm";
 import { createSalesOrder, shipSalesOrder, deliverSalesOrderAndRecogniseRevenue } from "@/server/services/sales";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export default async function OrdersPage() {
 
   async function handleCreateOrder(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "SALES_OP"]);
+
     const customerName = formData.get("customerName") as string;
     const customerPhone = formData.get("customerPhone") as string;
     const shippingAddress = formData.get("shippingAddress") as string;
@@ -40,6 +43,7 @@ export default async function OrdersPage() {
       lines: [{ variantId, quantity, unitPrice }],
       deliveryCharge,
       paymentMethod: "COD",
+      userId: user.id,
     });
 
     revalidatePath("/orders");
@@ -48,6 +52,7 @@ export default async function OrdersPage() {
 
   async function handleShipOrder(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "SALES_OP"]);
     const orderId = formData.get("orderId") as string;
     const courierId = formData.get("courierId") as string;
     const waybillNumber = formData.get("waybillNumber") as string;
@@ -56,6 +61,7 @@ export default async function OrdersPage() {
       orderId,
       courierId: courierId || undefined,
       waybillNumber: waybillNumber || undefined,
+      userId: user.id,
     });
 
     revalidatePath("/orders");
@@ -63,9 +69,10 @@ export default async function OrdersPage() {
 
   async function handleDeliverOrder(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "SALES_OP"]);
     const orderId = formData.get("orderId") as string;
 
-    await deliverSalesOrderAndRecogniseRevenue({ orderId });
+    await deliverSalesOrderAndRecogniseRevenue({ orderId, userId: user.id });
 
     revalidatePath("/orders");
     revalidatePath("/finance");

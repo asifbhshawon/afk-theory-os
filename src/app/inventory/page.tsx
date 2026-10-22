@@ -3,6 +3,7 @@ import { products, productVariants, inventoryLots, stockMovements, locations, pa
 import { desc, eq } from "drizzle-orm";
 import { receivePurchaseLot } from "@/server/services/inventory";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,8 @@ export default async function InventoryPage() {
 
   async function handleReceiveLot(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "INVENTORY_MGR"]);
+
     const variantId = formData.get("variantId") as string;
     const lotNumber = formData.get("lotNumber") as string;
     const quantity = Number(formData.get("quantity"));
@@ -76,6 +79,7 @@ export default async function InventoryPage() {
       unitCost,
       paymentAccountId,
       isRawMaterial,
+      userId: user.id,
     });
 
     revalidatePath("/inventory");

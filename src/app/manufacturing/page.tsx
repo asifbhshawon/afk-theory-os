@@ -3,6 +3,7 @@ import { productionOrders, productVariants, products, paymentAccounts } from "@/
 import { desc, eq } from "drizzle-orm";
 import { createProductionOrder, addProductionCost, completeProductionOrder } from "@/server/services/manufacturing";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function ManufacturingPage() {
 
   async function handleCreateOrder(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
     const orderNumber = formData.get("orderNumber") as string;
     const routeType = formData.get("routeType") as "FINISHED_PURCHASE" | "BLANK_CUSTOMIZATION" | "FABRIC_OUTSOURCED";
     const variantId = formData.get("targetVariantId") as string;
@@ -56,6 +58,7 @@ export default async function ManufacturingPage() {
       targetVariantId: variantId,
       plannedQuantity,
       notes,
+      userId: user.id,
     });
 
     revalidatePath("/manufacturing");
@@ -63,6 +66,7 @@ export default async function ManufacturingPage() {
 
   async function handleAddCost(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
     const productionOrderId = formData.get("productionOrderId") as string;
     const costType = formData.get("costType") as string;
     const amount = Number(formData.get("amount"));
@@ -75,6 +79,7 @@ export default async function ManufacturingPage() {
       amount,
       paymentAccountId: paymentAccountId || undefined,
       notes,
+      userId: user.id,
     });
 
     revalidatePath("/manufacturing");

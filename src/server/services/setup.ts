@@ -10,7 +10,7 @@ import {
   settings,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, generateSecurePassword } from "@/lib/auth";
 
 export const INITIAL_ROLES = [
   { code: "ADMIN", name: "System Administrator", description: "Full system administration and user management" },
@@ -163,6 +163,8 @@ export async function initializeSystem(partnerPasswords?: Record<string, string>
   }
 
   // 6. Seed 5 Founding Partners & Users
+  const credentialsCreated: { name: string; email: string; temporaryPassword: string; roles: string[] }[] = [];
+
   for (const p of INITIAL_PARTNERS) {
     // Check if partner exists
     const [existingPartner] = await db.select().from(partners).where(eq(partners.name, p.name)).limit(1);
@@ -185,8 +187,8 @@ export async function initializeSystem(partnerPasswords?: Record<string, string>
     // Check if user account exists
     const [existingUser] = await db.select().from(users).where(eq(users.email, p.email)).limit(1);
     if (!existingUser) {
-      // Secure local default password or operator password
-      const password = partnerPasswords?.[p.name] || `Afk@${p.name}2026!`;
+      // Use provided password or generate a cryptographically strong unique temporary password
+      const password = partnerPasswords?.[p.name] || generateSecurePassword(16);
       const passwordHash = hashPassword(password);
 
       const [newUser] = await db
@@ -198,6 +200,13 @@ export async function initializeSystem(partnerPasswords?: Record<string, string>
           status: "ACTIVE",
         })
         .returning();
+
+      credentialsCreated.push({
+        name: p.name,
+        email: p.email,
+        temporaryPassword: password,
+        roles: p.roles,
+      });
 
       // Link partner to user
       if (partnerId) {
@@ -214,5 +223,5 @@ export async function initializeSystem(partnerPasswords?: Record<string, string>
     }
   }
 
-  return { success: true };
+  return { success: true, credentials: credentialsCreated };
 }
