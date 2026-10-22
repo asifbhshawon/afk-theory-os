@@ -119,11 +119,19 @@ export default async function PartnersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="pb-2 border-b border-afk-border">
-        <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Founding Partners & Governance</h2>
-        <p className="text-xs text-afk-muted mt-0.5">
-          Five founding partners with initial 20% ownership each. Separate capital accounts, loans, and profit allocations.
-        </p>
+      <div className="pb-3 border-b border-afk-border flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Founding Partners & Governance</h2>
+          <p className="text-xs text-afk-muted mt-0.5">
+            Five founding partners with initial 20% ownership each. Separate capital accounts, loans, and profit allocations.
+          </p>
+        </div>
+        <a
+          href="/api/export/financial-statements?type=partner-statements"
+          className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+        >
+          <span>📥 Export Partner Statements (CSV)</span>
+        </a>
       </div>
 
       {/* Partner Statement Cards */}

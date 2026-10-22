@@ -103,12 +103,20 @@ export default async function FinancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-afk-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-afk-border">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Finance & General Ledger</h2>
           <p className="text-xs text-afk-muted mt-0.5">
             Double-entry journals, chart of accounts, and balanced financial transactions.
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="/api/export/financial-statements?type=trial-balance"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 Export Trial Balance (CSV)</span>
+          </a>
         </div>
       </div>
 
