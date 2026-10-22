@@ -1,0 +1,60 @@
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        afk: {
+          black: "#0A0B0C",
+          charcoal: "#141618",
+          surface: "#1D2024",
+          surfaceLight: "#272B31",
+          border: "#333840",
+          borderLight: "#424852",
+          muted: "#8A929E",
+          offwhite: "#F5F5F0",
+          cream: "#EAE9E1",
+          olive: {
+            dark: "#1A2219",
+            muted: "#2B3828",
+            DEFAULT: "#4F6348",
+            light: "#708966",
+            accent: "#8CA982",
+          },
+          gold: "#C49A45",
+          danger: "#E05252",
+          success: "#3EB465",
+          warning: "#E59E27",
+        },
+      },
+      fontFamily: {
+        sans: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+        mono: [
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "monospace",
+        ],
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
