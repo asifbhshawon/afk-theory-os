@@ -192,7 +192,7 @@ export async function reverseJournalEntry(
     .where(eq(journalLines.journalEntryId, original.id));
 
   // Invert debits and credits
-  const reversingLines = lines.map((l) => ({
+  const reversingLines = lines.map((l: any) => ({
     accountId: l.accountId,
     debit: Number(l.credit),
     credit: Number(l.debit),
@@ -416,6 +416,140 @@ export async function recordBusinessExpense(data: {
         credit: data.amount,
         partnerId,
         memo,
+      },
+    ],
+  });
+}
+
+// Partner Drawings / Withdrawals
+export async function recordPartnerDrawing(data: {
+  partnerId: string;
+  amount: number;
+  paymentAccountId: string;
+  reference?: string;
+  userId?: string;
+  notes?: string;
+  date?: Date;
+}) {
+  const [partner] = await db.select().from(partners).where(eq(partners.id, data.partnerId)).limit(1);
+  if (!partner) throw new Error("Partner not found.");
+
+  const [payAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.paymentAccountId)).limit(1);
+  if (!payAcc) throw new Error("Payment account not found.");
+
+  const [drawAcc] = await db.select().from(accounts).where(eq(accounts.name, `Partner Drawings - ${partner.name}`)).limit(1);
+  if (!drawAcc) throw new Error(`Drawings account not found for ${partner.name}`);
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "DRAWING",
+    description: `Partner withdrawal / drawings by ${partner.name}`,
+    reference: data.reference,
+    sourceModule: "PARTNERS",
+    sourceId: partner.id,
+    userId: data.userId,
+    lines: [
+      {
+        accountId: drawAcc.id,
+        debit: data.amount,
+        credit: 0,
+        partnerId: partner.id,
+        memo: `Drawings withdrawal by ${partner.name}`,
+      },
+      {
+        accountId: payAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Disbursed from ${payAcc.name}`,
+      },
+    ],
+  });
+}
+
+// Partner Reimbursement / Loan Repayment
+export async function recordPartnerReimbursement(data: {
+  partnerId: string;
+  amount: number;
+  paymentAccountId: string;
+  reference?: string;
+  userId?: string;
+  notes?: string;
+  date?: Date;
+}) {
+  const [partner] = await db.select().from(partners).where(eq(partners.id, data.partnerId)).limit(1);
+  if (!partner) throw new Error("Partner not found.");
+
+  const [payAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.paymentAccountId)).limit(1);
+  if (!payAcc) throw new Error("Payment account not found.");
+
+  const [dueAcc] = await db.select().from(accounts).where(eq(accounts.name, `Due to ${partner.name}`)).limit(1);
+  if (!dueAcc) throw new Error(`Due to account not found for ${partner.name}`);
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "PARTNER_REIMBURSEMENT",
+    description: `Loan reimbursement / repayment to partner ${partner.name}`,
+    reference: data.reference,
+    sourceModule: "PARTNERS",
+    sourceId: partner.id,
+    userId: data.userId,
+    lines: [
+      {
+        accountId: dueAcc.id,
+        debit: data.amount,
+        credit: 0,
+        partnerId: partner.id,
+        memo: `Repayment of advance due to ${partner.name}`,
+      },
+      {
+        accountId: payAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Disbursed from ${payAcc.name}`,
+      },
+    ],
+  });
+}
+
+// Transfer funds between cash, bank, bKash, and Nagad payment accounts
+export async function transferFunds(data: {
+  fromPaymentAccountId: string;
+  toPaymentAccountId: string;
+  amount: number;
+  reference?: string;
+  userId?: string;
+  date?: Date;
+}) {
+  if (data.fromPaymentAccountId === data.toPaymentAccountId) {
+    throw new Error("Source and destination accounts must be different.");
+  }
+
+  const [fromAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.fromPaymentAccountId)).limit(1);
+  const [toAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.toPaymentAccountId)).limit(1);
+
+  if (!fromAcc || !toAcc) {
+    throw new Error("Source or destination payment account not found.");
+  }
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "TRANSFER",
+    description: `Transfer ৳${data.amount.toFixed(2)} from ${fromAcc.name} to ${toAcc.name}`,
+    reference: data.reference,
+    sourceModule: "FINANCE",
+    userId: data.userId,
+    lines: [
+      {
+        accountId: toAcc.glAccountId,
+        debit: data.amount,
+        credit: 0,
+        memo: `Transfer deposit to ${toAcc.name}`,
+      },
+      {
+        accountId: fromAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Transfer withdrawal from ${fromAcc.name}`,
       },
     ],
   });

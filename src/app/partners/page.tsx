@@ -1,6 +1,12 @@
 import { db } from "@/db";
 import { partners, paymentAccounts } from "@/db/schema";
-import { getFinancialStatements, recordPartnerContribution, recordPartnerLoan } from "@/server/services/finance";
+import {
+  getFinancialStatements,
+  recordPartnerContribution,
+  recordPartnerLoan,
+  recordPartnerDrawing,
+  recordPartnerReimbursement,
+} from "@/server/services/finance";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 
@@ -49,6 +55,56 @@ export default async function PartnersPage() {
     }
 
     await recordPartnerLoan({
+      partnerId,
+      paymentAccountId,
+      amount,
+      reference,
+      userId: user.id,
+    });
+
+    revalidatePath("/partners");
+    revalidatePath("/finance");
+    revalidatePath("/");
+  }
+
+  async function handleRecordDrawing(formData: FormData) {
+    "use server";
+    const user = await requireRole(["ADMIN", "FINANCE_MGR"]);
+    const partnerId = formData.get("partnerId") as string;
+    const paymentAccountId = formData.get("paymentAccountId") as string;
+    const amount = Number(formData.get("amount"));
+    const reference = formData.get("reference") as string;
+
+    if (!partnerId || !paymentAccountId || !amount) {
+      throw new Error("Partner, account, and amount are required");
+    }
+
+    await recordPartnerDrawing({
+      partnerId,
+      paymentAccountId,
+      amount,
+      reference,
+      userId: user.id,
+    });
+
+    revalidatePath("/partners");
+    revalidatePath("/finance");
+    revalidatePath("/");
+  }
+
+  async function handleRecordReimbursement(formData: FormData) {
+    "use server";
+    const user = await requireRole(["ADMIN", "FINANCE_MGR"]);
+    const partnerId = formData.get("partnerId") as string;
+    const paymentAccountId = formData.get("paymentAccountId") as string;
+    const amount = Number(formData.get("amount"));
+    const reference = formData.get("reference") as string;
+
+    if (!partnerId || !paymentAccountId || !amount) {
+      throw new Error("Partner, account, and amount are required");
+    }
+
+    await recordPartnerReimbursement({
       partnerId,
       paymentAccountId,
       amount,
@@ -255,6 +311,153 @@ export default async function PartnersPage() {
               className="w-full py-2 bg-afk-surface hover:bg-afk-surfaceLight border border-afk-border text-afk-offwhite font-semibold rounded transition"
             >
               Post Partner Loan
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Forms Section 2: Partner Drawings & Loan Reimbursements */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Partner Drawings Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-1">Record Partner Drawings (Withdrawal)</h3>
+          <p className="text-xs text-afk-muted mb-4">
+            Debits Partner Drawings (Equity contra) and credits Cash/Bank. Tracks partner withdrawals against profit share.
+          </p>
+
+          <form action={handleRecordDrawing} className="space-y-3 text-xs">
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Partner</label>
+              <select
+                name="partnerId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Partner...</option>
+                {allPartners.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Disbursing Account</label>
+              <select
+                name="paymentAccountId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Account...</option>
+                {payAccounts.map((pa) => (
+                  <option key={pa.id} value={pa.id}>
+                    {pa.name} ({pa.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Withdrawal Amount (BDT ৳)</label>
+              <input
+                type="number"
+                name="amount"
+                step="0.01"
+                min="100"
+                required
+                placeholder="e.g. 10000"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Reference / Purpose</label>
+              <input
+                type="text"
+                name="reference"
+                placeholder="e.g. Monthly drawings disbursement"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite font-semibold rounded transition cursor-pointer"
+            >
+              Post Partner Drawings
+            </button>
+          </form>
+        </div>
+
+        {/* Partner Loan Repayment / Reimbursement Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-1">Repay Partner Loan / Reimbursement</h3>
+          <p className="text-xs text-afk-muted mb-4">
+            Debits Due to Partner (Liability) and credits Cash/Bank. Repays partner-paid business expenses or loan advances.
+          </p>
+
+          <form action={handleRecordReimbursement} className="space-y-3 text-xs">
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Partner</label>
+              <select
+                name="partnerId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Partner...</option>
+                {allPartners.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Disbursing Account</label>
+              <select
+                name="paymentAccountId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Account...</option>
+                {payAccounts.map((pa) => (
+                  <option key={pa.id} value={pa.id}>
+                    {pa.name} ({pa.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Repayment Amount (BDT ৳)</label>
+              <input
+                type="number"
+                name="amount"
+                step="0.01"
+                min="100"
+                required
+                placeholder="e.g. 15000"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Reference / Reason</label>
+              <input
+                type="text"
+                name="reference"
+                placeholder="e.g. Reimbursement for fabric factory advance"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 bg-afk-surface hover:bg-afk-surfaceLight border border-afk-border text-afk-offwhite font-semibold rounded transition cursor-pointer"
+            >
+              Post Partner Reimbursement
             </button>
           </form>
         </div>

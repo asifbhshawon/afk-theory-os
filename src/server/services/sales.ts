@@ -677,3 +677,24 @@ export async function processSalesReturn(data: {
     return rma;
   });
 }
+
+export async function processReturnOrExchange(data: {
+  orderId?: string;
+  salesOrderId?: string;
+  reason: string;
+  isRestockable: boolean;
+  refundAmount: number;
+  paymentAccountId?: string;
+  userId?: string;
+  notes?: string;
+}) {
+  return processSalesReturn({
+    salesOrderId: data.orderId || data.salesOrderId!,
+    reason: data.reason,
+    isRestockable: data.isRestockable,
+    refundAmount: data.refundAmount,
+    paymentAccountId: data.paymentAccountId,
+    userId: data.userId,
+    notes: data.notes,
+  });
+}
