@@ -8,7 +8,7 @@ import {
   fiscalPeriods,
   auditLogs,
 } from "@/db/schema";
-import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
 
 export interface CreateJournalLineInput {
   accountId: string;
@@ -30,25 +30,29 @@ export interface CreateJournalEntryInput {
   fiscalPeriodId?: string;
 }
 
-// Generate unique sequential journal entry number
-export async function generateJournalNumber(): Promise<string> {
+// Generate unique sequential journal entry number backed by atomic PostgreSQL sequence (concurrency-safe)
+export async function generateJournalNumber(txClient?: any): Promise<string> {
+  const client = txClient || db;
   const year = new Date().getFullYear();
-  const [result] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(journalEntries);
-
-  const seq = (Number(result?.count || 0) + 1).toString().padStart(4, "0");
-  const rand = Math.floor(Math.random() * 90 + 10);
-  return `AFK-JRN-${year}-${seq}${rand}`;
+  try {
+    const res = await client.execute(sql`SELECT nextval('journal_entry_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-JRN-${year}-${seq}`;
+  } catch {
+    await client.execute(sql`CREATE SEQUENCE IF NOT EXISTS journal_entry_seq START WITH 100001`);
+    const res = await client.execute(sql`SELECT nextval('journal_entry_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-JRN-${year}-${seq}`;
+  }
 }
 
-// Validate debits == credits and post atomic journal entry
-export async function postJournalEntry(input: CreateJournalEntryInput) {
+// Validate debits == credits and post atomic journal entry, optionally within parent transaction
+export async function postJournalEntry(input: CreateJournalEntryInput, txClient?: any) {
   if (!input.lines || input.lines.length < 2) {
     throw new Error("Journal entry must contain at least two lines.");
   }
 
-  // Calculate totals with 2 decimal precision (paisa)
+  // Calculate totals with 2 decimal precision (exact paisa arithmetic)
   let totalDebit = 0;
   let totalCredit = 0;
 
@@ -67,9 +71,11 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
     throw new Error("Journal total amount must be greater than zero.");
   }
 
+  const client = txClient || db;
+
   // Check if target fiscal period is closed
   const entryDate = input.date;
-  const [closedPeriod] = await db
+  const [closedPeriod] = await client
     .select()
     .from(fiscalPeriods)
     .where(
@@ -89,7 +95,7 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
 
   // Check idempotency reference if provided
   if (input.reference) {
-    const [existing] = await db
+    const [existing] = await client
       .select()
       .from(journalEntries)
       .where(
@@ -108,7 +114,7 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
 
   const entryNumber = await generateJournalNumber();
 
-  return await db.transaction(async (tx) => {
+  const executePost = async (tx: any) => {
     const [entry] = await tx
       .insert(journalEntries)
       .values({
@@ -147,16 +153,26 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
     }
 
     return entry;
-  });
+  };
+
+  if (txClient) {
+    return await executePost(txClient);
+  } else {
+    return await db.transaction(async (tx) => {
+      return await executePost(tx);
+    });
+  }
 }
 
 // Reverse posted journal entry
 export async function reverseJournalEntry(
   journalEntryId: string,
   reason: string,
-  userId: string
+  userId: string,
+  txClient?: any
 ) {
-  const [original] = await db
+  const client = txClient || db;
+  const [original] = await client
     .select()
     .from(journalEntries)
     .where(eq(journalEntries.id, journalEntryId))
@@ -170,7 +186,7 @@ export async function reverseJournalEntry(
     throw new Error("Journal entry is already reversed.");
   }
 
-  const lines = await db
+  const lines = await client
     .select()
     .from(journalLines)
     .where(eq(journalLines.journalEntryId, original.id));
@@ -186,7 +202,7 @@ export async function reverseJournalEntry(
 
   const reversingNumber = await generateJournalNumber();
 
-  return await db.transaction(async (tx) => {
+  const executeReversal = async (tx: any) => {
     // Mark original as reversed
     await tx
       .update(journalEntries)
@@ -230,7 +246,15 @@ export async function reverseJournalEntry(
     });
 
     return reversal;
-  });
+  };
+
+  if (txClient) {
+    return await executeReversal(txClient);
+  } else {
+    return await db.transaction(async (tx) => {
+      return await executeReversal(tx);
+    });
+  }
 }
 
 // Partner Equity Contribution
@@ -413,7 +437,7 @@ export async function getFinancialStatements(asOfDate: Date = new Date()) {
     .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
     .where(
       and(
-        eq(journalEntries.status, "POSTED"),
+        inArray(journalEntries.status, ["POSTED", "REVERSED"]),
         lte(journalEntries.date, asOfDate)
       )
     )

@@ -59,7 +59,7 @@ describe("Acceptance Test 5: Apparel Manufacturing Route 3 (Outsourced Factory)"
       variants: [{ sku: "FAB-SJ-240-BLK", size: "KG", color: "Black", costPrice: 500, sellingPrice: 0 }],
     });
 
-    const runId = Date.now().toString().slice(-5);
+    const runId = `${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const orderNumber = `MFG-2026-${runId}`;
     const finishedLotNumber = `LOT-AFK-TEE-${runId}`;
 
@@ -84,6 +84,7 @@ describe("Acceptance Test 5: Apparel Manufacturing Route 3 (Outsourced Factory)"
     });
 
     // 4. Issue 15 KG fabric to Factory WIP: 15 * 500 = ৳7,500
+    // issueFabricToFactory automatically updates order totalMaterialCost in the database
     await issueFabricToFactory({
       lotId: fabricLot.id,
       quantity: 15,
@@ -91,11 +92,11 @@ describe("Acceptance Test 5: Apparel Manufacturing Route 3 (Outsourced Factory)"
       notes: `15 KG fabric issued for ${orderNumber}`,
     });
 
-    // Update order's totalMaterialCost in DB
-    await db
-      .update(productionOrders)
-      .set({ totalMaterialCost: "7500.00" })
+    const [updatedOrder] = await db
+      .select()
+      .from(productionOrders)
       .where(eq(productionOrders.id, prodOrder.id));
+    expect(Number(updatedOrder.totalMaterialCost)).toBe(7500.0);
 
     // 5. Add Direct Production Costs:
     // CMT Labor: ৳4,000
