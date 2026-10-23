@@ -667,18 +667,32 @@ export async function getFinancialStatements(asOfDate: Date = new Date()) {
 
   const accountBalances = allAccounts.map((acc) => {
     const found = lineTotals.find((t) => t.accountId === acc.id);
-    const debit = Number(found?.totalDebit || 0);
-    const credit = Number(found?.totalCredit || 0);
-    const balance = acc.normalBalance === "DEBIT" ? debit - credit : credit - debit;
+    const grossDebit = Number(found?.totalDebit || 0);
+    const grossCredit = Number(found?.totalCredit || 0);
+    const balance = acc.normalBalance === "DEBIT" ? grossDebit - grossCredit : grossCredit - grossDebit;
+
+    // Standard GAAP Net Trial Balance amounts (net ending balances)
+    const netDebit =
+      acc.normalBalance === "DEBIT"
+        ? (balance > 0 ? balance : 0)
+        : (balance < 0 ? Math.abs(balance) : 0);
+
+    const netCredit =
+      acc.normalBalance === "CREDIT"
+        ? (balance > 0 ? balance : 0)
+        : (balance < 0 ? Math.abs(balance) : 0);
+
     return {
       ...acc,
-      debit,
-      credit,
+      grossDebit,
+      grossCredit,
+      debit: netDebit,
+      credit: netCredit,
       balance,
     };
   });
 
-  // 1. Trial Balance
+  // 1. Trial Balance (Sum of net debit balances == Sum of net credit balances)
   const totalDebit = accountBalances.reduce((s, a) => s + a.debit, 0);
   const totalCredit = accountBalances.reduce((s, a) => s + a.credit, 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
