@@ -8,7 +8,8 @@ import {
   fiscalPeriods,
   auditLogs,
 } from "@/db/schema";
-import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, or, sql, desc, gte, lte, inArray } from "drizzle-orm";
+import { getEvidenceForEntities } from "./evidence";
 
 export interface CreateJournalLineInput {
   accountId: string;
@@ -766,4 +767,104 @@ export async function getFinancialStatements(asOfDate: Date = new Date()) {
     },
     partnerStatements,
   };
+}
+
+export interface PartnerTransactionHistoryItem {
+  id: string; // journalEntry id
+  entryNumber: string;
+  date: Date;
+  entryType: string;
+  description: string;
+  reference?: string | null;
+  status: string;
+  partnerId?: string | null;
+  partnerName?: string | null;
+  amount: number;
+  evidence: any[];
+}
+
+export async function getPartnerTransactionHistory(
+  partnerId?: string,
+  limit = 50
+): Promise<PartnerTransactionHistoryItem[]> {
+  const entries = await db
+    .select({
+      id: journalEntries.id,
+      entryNumber: journalEntries.entryNumber,
+      date: journalEntries.date,
+      entryType: journalEntries.entryType,
+      description: journalEntries.description,
+      reference: journalEntries.reference,
+      status: journalEntries.status,
+      sourceModule: journalEntries.sourceModule,
+      sourceId: journalEntries.sourceId,
+    })
+    .from(journalEntries)
+    .where(
+      and(
+        inArray(journalEntries.status, ["POSTED", "REVERSED"]),
+        partnerId
+          ? or(
+              and(eq(journalEntries.sourceModule, "PARTNERS"), eq(journalEntries.sourceId, partnerId)),
+              eq(journalEntries.sourceId, partnerId)
+            )
+          : or(
+              eq(journalEntries.sourceModule, "PARTNERS"),
+              inArray(journalEntries.entryType, [
+                "CAPITAL_DEPOSIT",
+                "PARTNER_LOAN",
+                "PARTNER_DRAWINGS",
+                "PARTNER_REIMBURSEMENT",
+              ])
+            )
+      )
+    )
+    .orderBy(desc(journalEntries.date), desc(journalEntries.entryNumber))
+    .limit(limit);
+
+  if (entries.length === 0) return [];
+
+  const journalIds = entries.map((e) => e.id);
+  const evidenceMap = await getEvidenceForEntities("JOURNAL_ENTRY", journalIds);
+
+  const lines = await db
+    .select({
+      journalEntryId: journalLines.journalEntryId,
+      partnerId: journalLines.partnerId,
+      debit: journalLines.debit,
+      credit: journalLines.credit,
+      memo: journalLines.memo,
+      accountId: journalLines.accountId,
+    })
+    .from(journalLines)
+    .where(inArray(journalLines.journalEntryId, journalIds));
+
+  const allPartners = await db.select().from(partners);
+  const partnerMap = new Map(allPartners.map((p) => [p.id, p]));
+
+  return entries.map((entry) => {
+    const entryLines = lines.filter((l) => l.journalEntryId === entry.id);
+    let assignedPartnerId = entry.sourceId;
+    if (!assignedPartnerId || !partnerMap.has(assignedPartnerId)) {
+      const lineWithPartner = entryLines.find((l) => l.partnerId && partnerMap.has(l.partnerId));
+      assignedPartnerId = lineWithPartner?.partnerId || assignedPartnerId;
+    }
+    const partner = assignedPartnerId ? partnerMap.get(assignedPartnerId) : undefined;
+
+    const amount = entryLines.reduce((max, l) => Math.max(max, Number(l.debit), Number(l.credit)), 0);
+
+    return {
+      id: entry.id,
+      entryNumber: entry.entryNumber,
+      date: entry.date,
+      entryType: entry.entryType,
+      description: entry.description,
+      reference: entry.reference,
+      status: entry.status,
+      partnerId: partner?.id || null,
+      partnerName: partner?.name || null,
+      amount,
+      evidence: evidenceMap[entry.id] || [],
+    };
+  });
 }

@@ -11,10 +11,13 @@ import {
   AlertCircle,
   Loader2,
   Paperclip,
+  Eye,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
 import { VALID_CATEGORIES, EvidenceCategory } from "@/types/evidence";
 
-interface StagedFile {
+export interface StagedFile {
   id: string;
   file: File;
   previewUrl: string;
@@ -28,37 +31,72 @@ interface StagedFile {
   resultDoc?: any;
 }
 
-interface EvidenceUploaderProps {
+export interface EvidenceUploaderProps {
+  /**
+   * "form" = Mode A: stages files inside parent form before saving.
+   * "standalone" = Mode B: immediately uploads to an existing record.
+   */
+  mode?: "form" | "standalone";
+
+  // Mode A (form mode) props:
+  stagedFiles?: StagedFile[];
+  onStagedFilesChange?: (files: StagedFile[]) => void;
+
+  // Mode B (standalone mode) props:
   entityType?: string;
   entityId?: string;
   referenceId?: string;
   module?: string;
-  defaultCategory?: EvidenceCategory;
   onUploadComplete?: (uploadedDocs: any[]) => void;
+
+  // Common customization:
+  defaultCategory?: EvidenceCategory;
+  label?: string;
+  helperText?: string;
   className?: string;
   compact?: boolean;
 }
 
 export function EvidenceUploader({
+  mode = "form",
+  stagedFiles: externalStagedFiles,
+  onStagedFilesChange,
   entityType,
   entityId,
   referenceId,
   module = "GENERAL",
-  defaultCategory = "GENERAL_EVIDENCE",
+  defaultCategory = "PAYMENT_PROOF",
   onUploadComplete,
+  label,
+  helperText,
   className = "",
   compact = false,
 }: EvidenceUploaderProps) {
-  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  // Internal state when not controlled from parent
+  const [internalStagedFiles, setInternalStagedFiles] = useState<StagedFile[]>([]);
+  const stagedFiles = externalStagedFiles ?? internalStagedFiles;
+
+  const setStagedFiles = useCallback(
+    (updater: (prev: StagedFile[]) => StagedFile[]) => {
+      if (onStagedFilesChange) {
+        onStagedFilesChange(updater(stagedFiles));
+      } else {
+        setInternalStagedFiles(updater);
+      }
+    },
+    [onStagedFilesChange, stagedFiles]
+  );
+
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [previewModalFile, setPreviewModalFile] = useState<StagedFile | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const dropzoneRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Helper to create a staged file entry
+  // Helper to process & stage incoming files
   const stageFiles = useCallback(
     (files: FileList | File[]) => {
       setGlobalError(null);
@@ -67,7 +105,7 @@ export function EvidenceUploader({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        // Validate type
+        // Format validation
         const isImage = file.type.startsWith("image/");
         const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
@@ -76,7 +114,7 @@ export function EvidenceUploader({
           continue;
         }
 
-        // Max file size: 30MB
+        // 30MB limit
         if (file.size > 30 * 1024 * 1024) {
           setGlobalError(`File "${file.name}" exceeds maximum allowed size (30MB).`);
           continue;
@@ -100,20 +138,19 @@ export function EvidenceUploader({
 
       setStagedFiles((prev) => [...prev, ...newStaged]);
     },
-    [defaultCategory]
+    [defaultCategory, setStagedFiles]
   );
 
-  // Global Clipboard Paste Listener (Ctrl+V)
+  // Paste Screenshot (Ctrl+V) listener - handles pastes safely without intercepting normal inputs
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      // Don't intercept if user is typing in an active text input or textarea outside this component
       const activeEl = document.activeElement;
-      const isInput =
-        activeEl instanceof HTMLInputElement ||
+      // Don't intercept if user is typing text in an input or textarea
+      const isTextInput =
+        activeEl instanceof HTMLInputElement && activeEl.type !== "file" ||
         activeEl instanceof HTMLTextAreaElement ||
         (activeEl && activeEl.getAttribute("contenteditable") === "true");
 
-      // Check if clipboard contains files/images
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -131,11 +168,9 @@ export function EvidenceUploader({
       }
 
       if (imageFiles.length > 0) {
-        // Prevent default only if we captured screenshot images
+        // Only prevent default if paste contains image data
         e.preventDefault();
         stageFiles(imageFiles);
-      } else if (!isInput) {
-        // Ordinary text paste outside inputs - do nothing
       }
     };
 
@@ -166,7 +201,7 @@ export function EvidenceUploader({
     }
   };
 
-  // Remove a staged file
+  // Remove staged file
   const removeStagedFile = (id: string) => {
     setStagedFiles((prev) => {
       const target = prev.find((f) => f.id === id);
@@ -177,18 +212,8 @@ export function EvidenceUploader({
     });
   };
 
-  // Update metadata for a staged file
-  const updateStagedMetadata = (
-    id: string,
-    updates: Partial<Pick<StagedFile, "category" | "displayTitle" | "description">>
-  ) => {
-    setStagedFiles((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
-    );
-  };
-
-  // Upload all pending staged files
-  const handleUploadAll = async () => {
+  // Mode B: Upload directly to existing record
+  const handleStandaloneUpload = async () => {
     const pending = stagedFiles.filter((f) => f.status === "idle" || f.status === "error");
     if (pending.length === 0) return;
 
@@ -197,7 +222,6 @@ export function EvidenceUploader({
     const successfullyUploaded: any[] = [];
 
     for (const item of pending) {
-      // Set status to uploading
       setStagedFiles((prev) =>
         prev.map((f) => (f.id === item.id ? { ...f, status: "uploading" } : f))
       );
@@ -219,7 +243,6 @@ export function EvidenceUploader({
         });
 
         const data = await res.json();
-
         if (!res.ok || !data.success) {
           throw new Error(data.error || "Upload failed");
         }
@@ -229,17 +252,13 @@ export function EvidenceUploader({
 
         setStagedFiles((prev) =>
           prev.map((f) =>
-            f.id === item.id
-              ? { ...f, status: "success", resultDoc: savedDoc }
-              : f
+            f.id === item.id ? { ...f, status: "success", resultDoc: savedDoc } : f
           )
         );
       } catch (err: any) {
         setStagedFiles((prev) =>
           prev.map((f) =>
-            f.id === item.id
-              ? { ...f, status: "error", errorMessage: err.message || "Failed" }
-              : f
+            f.id === item.id ? { ...f, status: "error", errorMessage: err.message || "Failed" } : f
           )
         );
       }
@@ -255,58 +274,72 @@ export function EvidenceUploader({
   const hasPending = stagedFiles.some((f) => f.status === "idle" || f.status === "error");
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div ref={containerRef} className={`space-y-2.5 ${className}`}>
+      {/* Label & Description */}
+      <div className="flex items-center justify-between">
+        <label className="block text-[11px] font-semibold text-afk-offwhite flex items-center gap-1.5">
+          <Paperclip className="w-3.5 h-3.5 text-afk-olive" />
+          <span>{label || "Supporting Proof / Attachments (Optional)"}</span>
+        </label>
+        {stagedFiles.length > 0 && (
+          <span className="text-[10px] font-mono text-afk-olive font-medium bg-afk-olive/10 px-2 py-0.5 rounded border border-afk-olive/30">
+            {stagedFiles.length} {stagedFiles.length === 1 ? "file staged" : "files staged"}
+          </span>
+        )}
+      </div>
+
+      {helperText && <p className="text-[10px] text-afk-muted">{helperText}</p>}
+
       {/* Dropzone Box */}
       <div
-        ref={dropzoneRef}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         tabIndex={0}
-        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 outline-none p-6 text-center select-none ${
+        className={`relative border-2 border-dashed rounded-xl transition-all duration-200 outline-none text-center select-none ${
           isDragOver
             ? "border-afk-olive bg-afk-olive/15 scale-[1.005] shadow-lg shadow-afk-olive/10"
-            : "border-afk-border hover:border-afk-olive/60 bg-afk-surface/50 hover:bg-afk-surface/80"
-        } ${compact ? "p-4" : "p-6"}`}
+            : "border-afk-border hover:border-afk-olive/60 bg-afk-surface/40 hover:bg-afk-surface/70"
+        } ${compact ? "p-3" : "p-4"}`}
       >
-        <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
-          <div className="w-12 h-12 rounded-full bg-afk-charcoal border border-afk-border flex items-center justify-center text-afk-olive">
-            <UploadCloud className="w-6 h-6 animate-pulse" />
+        <div className="flex flex-col items-center justify-center space-y-1.5 pointer-events-none">
+          <div className="w-9 h-9 rounded-full bg-afk-charcoal border border-afk-border flex items-center justify-center text-afk-olive">
+            <UploadCloud className="w-4 h-4 animate-pulse" />
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-afk-offwhite">
-              Drag & drop evidence here, or paste from clipboard (Ctrl+V)
+            <p className="text-xs font-semibold text-afk-offwhite">
+              Drag & drop proof here, or paste screenshot <span className="text-afk-olive font-mono">(Ctrl+V)</span>
             </p>
-            <p className="text-xs text-afk-muted mt-1">
-              Supports screenshots, JPG, PNG, WebP (auto-converted to WebP) & PDF documents up to 30MB
+            <p className="text-[10px] text-afk-muted mt-0.5">
+              Receipts, bank slips, bKash screenshots (auto WebP conversion) & PDFs up to 30MB
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-3.5 py-1.5 rounded-lg bg-afk-surface hover:bg-afk-border/60 text-afk-offwhite text-xs font-medium border border-afk-border flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3 py-1 rounded-lg bg-afk-surface hover:bg-afk-border/70 text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
           >
-            <Paperclip className="w-3.5 h-3.5 text-afk-olive" />
-            <span>Browse Files</span>
+            <Paperclip className="w-3 h-3 text-afk-olive" />
+            <span>Choose Files</span>
           </button>
 
           {/* Mobile Camera Button */}
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            className="px-3.5 py-1.5 rounded-lg bg-afk-surface hover:bg-afk-border/60 text-afk-offwhite text-xs font-medium border border-afk-border flex items-center gap-1.5 transition-colors shadow-sm md:hidden"
+            className="px-3 py-1 rounded-lg bg-afk-surface hover:bg-afk-border/70 text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1.5 transition-colors shadow-sm md:hidden cursor-pointer"
           >
-            <Camera className="w-3.5 h-3.5 text-sky-400" />
+            <Camera className="w-3 h-3 text-sky-400" />
             <span>Take Photo</span>
           </button>
         </div>
 
-        {/* Hidden native inputs */}
+        {/* Hidden inputs */}
         <input
           ref={fileInputRef}
           type="file"
@@ -334,50 +367,57 @@ export function EvidenceUploader({
 
       {/* Global Error Banner */}
       {globalError && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span>{globalError}</span>
         </div>
       )}
 
-      {/* Staged Files Preview List */}
+      {/* Staged Files List with Thumbnails, View & Remove */}
       {stagedFiles.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-afk-offwhite tracking-wider uppercase">
-              Staged Attachments ({stagedFiles.length})
-            </h4>
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-[11px] text-afk-muted">
+            <span className="font-semibold text-afk-offwhite uppercase tracking-wider text-[10px]">
+              Attached Proof Preview ({stagedFiles.length})
+            </span>
 
-            {hasPending && (
+            {/* Standalone mode upload button */}
+            {mode === "standalone" && hasPending && (
               <button
                 type="button"
                 disabled={isUploading}
-                onClick={handleUploadAll}
-                className="px-3.5 py-1.5 rounded-lg bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite text-xs font-semibold flex items-center gap-1.5 transition shadow-sm disabled:opacity-50"
+                onClick={handleStandaloneUpload}
+                className="px-3 py-1 rounded bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite text-xs font-semibold flex items-center gap-1.5 transition shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {isUploading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing & Converting...</span>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Converting to WebP & Linking...</span>
                   </>
                 ) : (
                   <>
-                    <UploadCloud className="w-3.5 h-3.5" />
-                    <span>Upload & Convert to WebP</span>
+                    <UploadCloud className="w-3 h-3" />
+                    <span>Attach & Save Proof</span>
                   </>
                 )}
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {stagedFiles.map((item) => (
               <div
                 key={item.id}
-                className="p-3 rounded-lg bg-afk-surface border border-afk-border flex gap-3 relative group"
+                className="p-2.5 rounded-lg bg-afk-surface border border-afk-border flex items-center gap-2.5 relative group hover:border-afk-olive/50 transition-colors"
               >
-                {/* Thumbnail / Icon */}
-                <div className="w-16 h-16 rounded bg-afk-charcoal border border-afk-border/80 flex items-center justify-center shrink-0 overflow-hidden relative">
+                {/* Thumbnail Preview */}
+                <div
+                  onClick={() => item.isImage && setPreviewModalFile(item)}
+                  className={`w-12 h-12 rounded bg-afk-charcoal border border-afk-border/80 flex items-center justify-center shrink-0 overflow-hidden relative ${
+                    item.isImage ? "cursor-pointer hover:opacity-90" : ""
+                  }`}
+                  title={item.isImage ? "Click to preview full size" : item.file.name}
+                >
                   {item.isImage && item.previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -386,84 +426,104 @@ export function EvidenceUploader({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <FileText className="w-8 h-8 text-amber-400" />
+                    <FileText className="w-6 h-6 text-amber-400" />
                   )}
 
-                  {/* Status Overlay */}
                   {item.status === "uploading" && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                      <Loader2 className="w-5 h-5 text-afk-olive animate-spin" />
+                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-afk-olive animate-spin" />
                     </div>
                   )}
+
                   {item.status === "success" && (
-                    <div className="absolute top-1 right-1 bg-emerald-500 rounded-full p-0.5 text-black">
-                      <CheckCircle2 className="w-3 h-3 text-white" />
+                    <div className="absolute top-0.5 right-0.5 bg-emerald-500 rounded-full p-0.5 text-black">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-white" />
                     </div>
                   )}
                 </div>
 
-                {/* File Details & Form Fields */}
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex items-start justify-between gap-1">
-                    <input
-                      type="text"
-                      value={item.displayTitle}
-                      disabled={item.status === "success" || item.status === "uploading"}
-                      onChange={(e) => updateStagedMetadata(item.id, { displayTitle: e.target.value })}
-                      placeholder="Title / description"
-                      className="w-full text-xs font-medium text-afk-offwhite bg-transparent border-b border-transparent hover:border-afk-border focus:border-afk-olive outline-none px-0.5"
-                    />
-                    {item.status !== "uploading" && (
-                      <button
-                        type="button"
-                        onClick={() => removeStagedFile(item.id)}
-                        className="text-afk-muted hover:text-red-400 p-0.5 transition"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                {/* Details */}
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-xs font-medium text-afk-offwhite truncate" title={item.file.name}>
+                    {item.displayTitle || item.file.name}
+                  </p>
+
+                  <div className="flex items-center gap-2 text-[10px] text-afk-muted">
+                    <span className="font-mono">{(item.file.size / 1024).toFixed(0)} KB</span>
+                    {item.isImage && (
+                      <span className="text-afk-olive font-mono flex items-center gap-0.5 text-[9px]">
+                        <Sparkles className="w-2.5 h-2.5" /> WebP
+                      </span>
                     )}
+                    {item.isPdf && <span className="text-amber-400 font-mono text-[9px]">PDF</span>}
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={item.category}
-                      disabled={item.status === "success" || item.status === "uploading"}
-                      onChange={(e) =>
-                        updateStagedMetadata(item.id, { category: e.target.value as EvidenceCategory })
-                      }
-                      className="text-[10px] bg-afk-charcoal text-afk-offwhite rounded px-1.5 py-0.5 border border-afk-border outline-none"
+                {/* Action buttons: View & Remove */}
+                <div className="flex items-center gap-1">
+                  {item.isImage && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModalFile(item)}
+                      className="p-1 text-afk-muted hover:text-afk-offwhite rounded hover:bg-afk-border/50 transition cursor-pointer"
+                      title="View preview"
                     >
-                      {VALID_CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat.replace(/_/g, " ")}
-                        </option>
-                      ))}
-                    </select>
-
-                    <span className="text-[10px] text-afk-muted font-mono">
-                      {(item.file.size / 1024).toFixed(0)} KB
-                    </span>
-                  </div>
-
-                  {/* Status Text */}
-                  {item.status === "uploading" && (
-                    <p className="text-[10px] text-afk-olive animate-pulse font-mono">
-                      Converting to WebP & saving...
-                    </p>
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                  {item.status === "success" && (
-                    <p className="text-[10px] text-emerald-400 font-mono">
-                      ✓ Stored as WebP / PDF
-                    </p>
-                  )}
-                  {item.status === "error" && (
-                    <p className="text-[10px] text-red-400 truncate font-mono">
-                      {item.errorMessage || "Upload failed"}
-                    </p>
+
+                  {item.status !== "uploading" && (
+                    <button
+                      type="button"
+                      onClick={() => removeStagedFile(item.id)}
+                      className="p-1 text-afk-muted hover:text-red-400 rounded hover:bg-afk-border/50 transition cursor-pointer"
+                      title="Remove file"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Preview Modal for Staged Image */}
+      {previewModalFile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setPreviewModalFile(null)}
+        >
+          <div
+            className="max-w-3xl max-h-[90vh] bg-afk-charcoal border border-afk-border rounded-xl p-4 flex flex-col space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-afk-border">
+              <span className="text-xs font-semibold text-afk-offwhite truncate">
+                {previewModalFile.file.name} ({(previewModalFile.file.size / 1024).toFixed(0)} KB)
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewModalFile(null)}
+                className="text-afk-muted hover:text-afk-offwhite p-1 rounded hover:bg-afk-surface"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-auto max-h-[70vh] flex items-center justify-center bg-black/40 rounded-lg p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewModalFile.previewUrl}
+                alt="Preview"
+                className="max-w-full max-h-[65vh] object-contain rounded"
+              />
+            </div>
+
+            <p className="text-[10px] text-afk-muted text-center font-mono">
+              Will be automatically converted to high-quality .webp upon saving
+            </p>
           </div>
         </div>
       )}

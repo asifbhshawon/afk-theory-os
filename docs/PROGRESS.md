@@ -65,6 +65,21 @@
 - [x] Implemented `/api/export/orders` supporting sales log, courier tracking, customer contacts, and settlement status.
 - [x] Added direct export trigger buttons across Reports, Finance, Inventory, Orders, and Partners views.
 
+### Phase 8: Universal Evidence, Sharp WebP Conversion & Contextual Proof Engine
+- [x] **Universal Evidence Architecture:** Local-first document storage under persistent Docker volume (`STORAGE_DIR`), automated Sharp-based WebP conversion, auto EXIF orientation correction, thumbnail generation, and SHA-256 integrity verification.
+- [x] **Integrated Form Staging (Mode A):** Refactored `EvidenceUploader` to support staging files inside any transaction form (drag-and-drop, clipboard paste with `Ctrl+V`, file picker, mobile camera). Coordinates single-click form submission without separate manual uploads.
+- [x] **Direct Record Attachment (Mode B):** Added `AddProofModal` allowing authorized users to attach missing proof to existing journal entries and partner records without altering balances or dates.
+- [x] **Partner Accounts (`/partners`):** Integrated contextual proof uploader across all 4 partner forms:
+  1. Record Partner Equity Contribution
+  2. Record Partner Loan Advance
+  3. Record Partner Drawings (Withdrawal)
+  4. Repay Partner Loan / Reimbursement
+  Added **Partner Financial History & Transaction Proof** table with attachment indicators (`📎 X`), thumbnail previews, `EvidenceViewer` full lightbox viewer, and printable voucher integration.
+- [x] **Finance & General Ledger (`/finance`):** Integrated contextual uploader into Quick Expense and Inter-Account Transfers. Added Supporting Proof indicators and "Add Proof" modal to General Ledger entries table.
+- [x] **Printable Vouchers (`/print/voucher/[id]`):** Enhanced Supporting Proof & Evidence Appendix with clickable thumbnails, EvidenceViewer lightbox, optional full-size print appendix pages, and "+ Attach Missing Proof" button.
+- [x] **Backend Atomicity (`src/server/services/finance-with-evidence.ts` & `/api/finance/entry-with-evidence`):** Pre-validates files before posting journals; coordinates WebP storage and inserts into `documents` and `documentLinks` with exact immutable database IDs. Idempotency key protection prevents duplicate postings.
+- [x] **Automated Acceptance Test Suite (`tests/acceptance/17-contextual-proof-upload.test.ts`):** 7 comprehensive tests covering partner contribution, loan, expense, transfer, late attachment (Mode B), corruption abort, and batch N+1 prevention.
+
 ---
 
 ## 3. Test Verification Suite
@@ -72,21 +87,24 @@
 ```text
  RUN  v5.0.5 C:/Users/User/Documents/Shawon/afk-business-os
 
- ✓ tests/acceptance/06-sales-orders-courier.test.ts (5 tests) 406ms
- ✓ tests/acceptance/05-manufacturing-production.test.ts (1 test) 164ms
- ✓ tests/acceptance/03-inventory-fabric.test.ts (2 tests) 114ms
- ✓ tests/security/access-control.test.ts (5 tests) 118ms
- ✓ tests/acceptance/08-atomic-transaction-rollback.test.ts (2 tests) 109ms
- ✓ tests/acceptance/02-equity-contribution.test.ts (2 tests) 69ms
- ✓ tests/acceptance/14-voucher-reports-agreement.test.ts (2 tests) 42ms
- ✓ tests/acceptance/01-partners-ownership.test.ts (2 tests) 37ms
- ✓ tests/acceptance/12-period-close-rbac.test.ts (2 tests) 39ms
+ ✓ tests/acceptance/16-evidence-document-management.test.ts (13 tests)
+ ✓ tests/acceptance/15-venture-investment-engine.test.ts (13 tests)
+ ✓ tests/acceptance/17-contextual-proof-upload.test.ts (7 tests)
+ ✓ tests/acceptance/06-sales-orders-courier.test.ts (5 tests)
+ ✓ tests/acceptance/05-manufacturing-production.test.ts (1 test)
+ ✓ tests/security/access-control.test.ts (5 tests)
+ ✓ tests/acceptance/03-inventory-fabric.test.ts (2 tests)
+ ✓ tests/acceptance/08-atomic-transaction-rollback.test.ts (2 tests)
+ ✓ tests/acceptance/02-equity-contribution.test.ts (2 tests)
+ ✓ tests/acceptance/14-voucher-reports-agreement.test.ts (2 tests)
+ ✓ tests/acceptance/12-period-close-rbac.test.ts (2 tests)
+ ✓ tests/acceptance/01-partners-ownership.test.ts (2 tests)
 
- Test Files  9 passed (9)
-      Tests  23 passed (23)
-   Duration  7.04s
+ Test Files  12 passed (12)
+      Tests  56 passed (56)
+   Duration  11.11s
 
-[OK] All acceptance tests passed successfully!
+[OK] All 12 test suites (56 tests) passed with 100% success!
 ```
 
 ---
@@ -95,24 +113,33 @@
 
 ```text
 Route (app)                                 Size  First Load JS
-┌ ƒ /                                      182 B         107 kB
+┌ ƒ /                                      184 B         107 kB
 ├ ƒ /_not-found                            987 B         103 kB
-├ ƒ /api/backup                            144 B         102 kB
-├ ƒ /api/export/financial-statements       144 B         102 kB
-├ ƒ /api/export/inventory                  144 B         102 kB
-├ ƒ /api/export/orders                     144 B         102 kB
-├ ƒ /api/health                            144 B         102 kB
-├ ƒ /finance                               182 B         107 kB
-├ ƒ /inventory                             144 B         102 kB
+├ ƒ /api/backup                            151 B         102 kB
+├ ƒ /api/documents/[id]                    151 B         102 kB
+├ ƒ /api/documents/[id]/thumbnail          151 B         102 kB
+├ ƒ /api/documents/upload                  151 B         102 kB
+├ ƒ /api/export/financial-statements       151 B         102 kB
+├ ƒ /api/export/inventory                  151 B         102 kB
+├ ƒ /api/export/orders                     151 B         102 kB
+├ ƒ /api/finance/entry-with-evidence       151 B         102 kB
+├ ƒ /api/health                            151 B         102 kB
+├ ƒ /documents                           7.05 kB         118 kB
+├ ƒ /finance                             7.65 kB         123 kB
+├ ƒ /inventory                             151 B         102 kB
 ├ ƒ /login                               1.47 kB         103 kB
-├ ƒ /manufacturing                         144 B         102 kB
-├ ƒ /orders                                182 B         107 kB
-├ ƒ /partners                              144 B         102 kB
+├ ƒ /manufacturing                         151 B         102 kB
+├ ƒ /orders                                184 B         107 kB
+├ ƒ /partners                            5.92 kB         121 kB
 ├ ƒ /print/invoice/[id]                  2.16 kB         104 kB
-├ ƒ /print/voucher/[id]                  2.16 kB         104 kB
-├ ƒ /reports                               144 B         102 kB
-├ ƒ /settings                            2.87 kB         105 kB
-└ ƒ /setup                                 182 B         107 kB
+├ ƒ /print/voucher/[id]                  4.78 kB         116 kB
+├ ƒ /reports                               151 B         102 kB
+├ ƒ /settings                             2.9 kB         105 kB
+├ ƒ /setup                                 184 B         107 kB
+├ ƒ /studio                                184 B         107 kB
+├ ƒ /ventures                              184 B         107 kB
+├ ƒ /ventures/[id]                       8.23 kB         115 kB
+└ ƒ /ventures/new                        7.83 kB         114 kB
 + First Load JS shared by all             102 kB
 
 ✓ Compiled successfully (0 errors, 0 warnings)

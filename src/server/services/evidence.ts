@@ -539,6 +539,99 @@ export async function getEvidenceForEntity(entityType: string, entityId: string)
   return results;
 }
 
+// Batch lookup of evidence for multiple entities in a single query
+export async function getEvidenceForEntities(
+  entityType: string,
+  entityIds: string[]
+): Promise<Record<string, any[]>> {
+  if (!entityIds || entityIds.length === 0) return {};
+
+  const uniqueIds = Array.from(new Set(entityIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return {};
+
+  const resultMap: Record<string, any[]> = {};
+  for (const id of uniqueIds) {
+    resultMap[id] = [];
+  }
+
+  const directDocs = await db
+    .select({
+      doc: documents,
+      uploaderName: users.name,
+    })
+    .from(documents)
+    .leftJoin(users, eq(documents.uploadedByUserId, users.id))
+    .where(
+      and(
+        eq(documents.entityType, entityType),
+        inArray(documents.entityId, uniqueIds),
+        eq(documents.isArchived, false)
+      )
+    )
+    .orderBy(desc(documents.createdAt));
+
+  const linkedDocs = await db
+    .select({
+      doc: documents,
+      link: documentLinks,
+      uploaderName: users.name,
+    })
+    .from(documentLinks)
+    .innerJoin(documents, eq(documentLinks.documentId, documents.id))
+    .leftJoin(users, eq(documents.uploadedByUserId, users.id))
+    .where(
+      and(
+        eq(documentLinks.entityType, entityType),
+        inArray(documentLinks.entityId, uniqueIds),
+        eq(documents.isArchived, false)
+      )
+    )
+    .orderBy(desc(documents.createdAt));
+
+  const seenPerEntity = new Map<string, Set<string>>();
+
+  for (const item of directDocs) {
+    const eId = item.doc.entityId;
+    if (eId) {
+      if (!seenPerEntity.has(eId)) seenPerEntity.set(eId, new Set());
+      const seen = seenPerEntity.get(eId)!;
+      if (!seen.has(item.doc.id)) {
+        seen.add(item.doc.id);
+        if (!resultMap[eId]) resultMap[eId] = [];
+        resultMap[eId].push({
+          ...item.doc,
+          uploaderName: item.uploaderName || "System",
+          linkType: "PRIMARY",
+          url: `/api/documents/${item.doc.id}`,
+          thumbnailUrl: item.doc.thumbnailPath ? `/api/documents/${item.doc.id}/thumbnail` : null,
+        });
+      }
+    }
+  }
+
+  for (const item of linkedDocs) {
+    const eId = item.link.entityId;
+    if (eId) {
+      if (!seenPerEntity.has(eId)) seenPerEntity.set(eId, new Set());
+      const seen = seenPerEntity.get(eId)!;
+      if (!seen.has(item.doc.id)) {
+        seen.add(item.doc.id);
+        if (!resultMap[eId]) resultMap[eId] = [];
+        resultMap[eId].push({
+          ...item.doc,
+          uploaderName: item.uploaderName || "System",
+          linkType: item.link.linkType,
+          linkNotes: item.link.notes,
+          url: `/api/documents/${item.doc.id}`,
+          thumbnailUrl: item.doc.thumbnailPath ? `/api/documents/${item.doc.id}/thumbnail` : null,
+        });
+      }
+    }
+  }
+
+  return resultMap;
+}
+
 export interface ListDocumentsParams {
   search?: string;
   module?: string;
