@@ -362,9 +362,73 @@ export async function recordPartnerLoan(data: {
   });
 }
 
+// Create Custom Expense Category / Account
+export async function createCustomExpenseCategory(input: {
+  name: string;
+  description?: string;
+  code?: string;
+  userId?: string;
+}) {
+  const trimmedName = input.name.trim();
+  if (!trimmedName) throw new Error("Expense category name is required");
+
+  // Check if account with same name already exists (case-insensitive)
+  const existing = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.group, "EXPENSE"), sql`lower(${accounts.name}) = lower(${trimmedName})`))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  let codeToUse = input.code?.trim();
+  if (!codeToUse) {
+    // Determine next available code in 6000 operating expenses
+    const expAccounts = await db
+      .select({ code: accounts.code })
+      .from(accounts)
+      .where(eq(accounts.group, "EXPENSE"));
+
+    const numericCodes = expAccounts
+      .map((a) => parseInt(a.code, 10))
+      .filter((n) => !isNaN(n) && n >= 6000 && n < 7000);
+
+    const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 6050;
+    codeToUse = String(maxCode + 10);
+  }
+
+  const [newAcc] = await db
+    .insert(accounts)
+    .values({
+      code: codeToUse,
+      name: trimmedName,
+      group: "EXPENSE",
+      normalBalance: "DEBIT",
+      description: input.description || `Custom expense category: ${trimmedName}`,
+      isSystem: false,
+      isActive: true,
+    })
+    .returning();
+
+  if (input.userId) {
+    await db.insert(auditLogs).values({
+      userId: input.userId,
+      action: "CREATE_EXPENSE_ACCOUNT",
+      entityType: "ACCOUNT",
+      entityId: newAcc.id,
+      details: `Created custom expense category ${newAcc.code} - ${newAcc.name}`,
+    });
+  }
+
+  return newAcc;
+}
+
 // Business Expense (from Payment Account or Due to Partner)
 export async function recordBusinessExpense(data: {
-  expenseAccountId: string;
+  expenseAccountId?: string;
+  customCategoryName?: string;
   paymentAccountId?: string;
   partnerId?: string; // If paid personally by partner
   amount: number;
@@ -373,7 +437,22 @@ export async function recordBusinessExpense(data: {
   userId?: string;
   date?: Date;
 }) {
-  const [expenseAcc] = await db.select().from(accounts).where(eq(accounts.id, data.expenseAccountId)).limit(1);
+  let targetExpenseAccountId = data.expenseAccountId;
+
+  // Auto-create or resolve custom category if provided
+  if (data.customCategoryName && data.customCategoryName.trim()) {
+    const customAcc = await createCustomExpenseCategory({
+      name: data.customCategoryName,
+      userId: data.userId,
+    });
+    targetExpenseAccountId = customAcc.id;
+  }
+
+  if (!targetExpenseAccountId || targetExpenseAccountId === "NEW_CUSTOM") {
+    throw new Error("Must select an expense category or provide a custom category name.");
+  }
+
+  const [expenseAcc] = await db.select().from(accounts).where(eq(accounts.id, targetExpenseAccountId)).limit(1);
   if (!expenseAcc) throw new Error("Expense account not found.");
 
   let creditAccountId: string;
