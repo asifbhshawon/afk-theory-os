@@ -54,11 +54,11 @@ export async function Header() {
         {user ? (
           <div className="flex items-center gap-3 pl-2 border-l border-afk-border">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-afk-olive text-afk-offwhite border border-afk-olive-light flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 rounded-full bg-afk-olive text-afk-offwhite border border-afk-olive-light flex items-center justify-center font-bold text-xs shadow-sm">
                 {initial}
               </div>
               <div className="hidden sm:block">
-                <p className="text-xs font-medium text-afk-offwhite leading-tight">{user.name}</p>
+                <p className="text-xs font-semibold text-afk-offwhite leading-tight">{user.name}</p>
                 <p className="text-[10px] text-afk-muted leading-tight capitalize">{primaryRole}</p>
               </div>
             </div>
@@ -76,9 +76,9 @@ export async function Header() {
         ) : (
           <Link
             href="/login"
-            className="px-3 py-1 bg-afk-olive text-afk-offwhite rounded text-xs hover:bg-afk-olive-light transition"
+            className="px-3.5 py-1.5 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite rounded-md text-xs font-semibold transition shadow-sm border border-afk-olive-light flex items-center gap-1.5"
           >
-            Sign In
+            <span>Sign In</span>
           </Link>
         )}
       </div>

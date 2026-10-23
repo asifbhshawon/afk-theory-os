@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/MobileNav";
 import { getCurrentUser } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export const metadata: Metadata = {
   title: "AFK THEORY Business OS",
@@ -15,12 +16,20 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headerList = await headers();
+  const pathname = headerList.get("x-pathname") || "";
   const user = await getCurrentUser();
+
+  // Bare pages that must render standalone without application chrome
+  const isBareLayout =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/setup") ||
+    pathname.startsWith("/print");
 
   return (
     <html lang="en" className="dark">
-      <body className="bg-afk-black text-afk-offwhite min-h-screen flex">
-        {user ? (
+      <body className="bg-afk-black text-afk-offwhite min-h-screen flex selection:bg-afk-olive selection:text-afk-offwhite antialiased">
+        {!isBareLayout ? (
           <>
             <Sidebar />
             <div className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
