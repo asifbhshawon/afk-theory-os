@@ -37,6 +37,7 @@ services:
       STORAGE_DIR: /app/storage
       BACKUP_DIR: /app/backups
       RESTIC_PASSWORD: ${RESTIC_PASSWORD:-afk-theory-secure-local-backup-key-2026}
+      MIGRATIONS_FOLDER: /app/src/db/migrations
     ports:
       - "${HOST_BINDING:-127.0.0.1}:${PORT:-3000}:3000"
     volumes:

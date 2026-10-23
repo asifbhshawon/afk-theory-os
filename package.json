@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "build:init": "esbuild scripts/init-db.ts --bundle --platform=node --target=node24 --external:pg --outfile=scripts/init-db.cjs"
   },
   "keywords": [],
   "author": "",
@@ -37,6 +38,7 @@
     "@types/sharp": "^0.32.0",
     "autoprefixer": "^10.6.1",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.25.12",
     "postcss": "^8.5.31",
     "tailwindcss": "3.4.17",
     "tsx": "^4.23.15",
