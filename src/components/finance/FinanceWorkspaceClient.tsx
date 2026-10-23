@@ -8,6 +8,7 @@ import {
 } from "@/components/evidence/EvidenceUploader";
 import { EvidenceViewer, ViewerDocument } from "@/components/evidence/EvidenceViewer";
 import { AddProofModal } from "@/components/evidence/AddProofModal";
+import { ReverseTransactionModal } from "@/components/finance/ReverseTransactionModal";
 import Link from "next/link";
 import {
   Receipt,
@@ -107,10 +108,8 @@ export function FinanceWorkspaceClient({
   // Mode B: Add Proof Modal
   const [addProofEntry, setAddProofEntry] = useState<JournalEntryItem | null>(null);
 
-  // Reversal state
-  const [reversingEntryId, setReversingEntryId] = useState<string | null>(null);
-  const [reversalReason, setReversalReason] = useState("");
-  const [isSubmittingReversal, setIsSubmittingReversal] = useState(false);
+  // Reversal Modal state
+  const [reversingEntry, setReversingEntry] = useState<JournalEntryItem | null>(null);
 
   const openViewerForEntry = (docs: ViewerDocument[], initialIdx = 0) => {
     setViewerDocs(docs);
@@ -709,7 +708,7 @@ export function FinanceWorkspaceClient({
                       )}
                     </td>
 
-                    {/* Actions: Add Proof & Voucher */}
+                    {/* Actions: Add Proof, Voucher, Reverse */}
                     <td className="py-2.5 text-right font-sans">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -731,6 +730,24 @@ export function FinanceWorkspaceClient({
                           <FileText className="w-3 h-3 text-afk-olive-accent" />
                           <span>Voucher</span>
                         </Link>
+
+                        {canManage && (
+                          entry.status === "REVERSED" ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 font-medium">
+                              Reversed
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setReversingEntry(entry)}
+                              className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                              title="Reverse this journal entry"
+                            >
+                              <RotateCcw className="w-3 h-3 text-amber-400" />
+                              <span>Reverse</span>
+                            </button>
+                          )
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -766,6 +783,29 @@ export function FinanceWorkspaceClient({
                 item.id === addProofEntry.id
                   ? { ...item, evidence: [...newDocs, ...(item.evidence || [])] }
                   : item
+              )
+            );
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Reverse Transaction Modal */}
+      {reversingEntry && (
+        <ReverseTransactionModal
+          isOpen={!!reversingEntry}
+          onClose={() => setReversingEntry(null)}
+          transaction={reversingEntry}
+          onSuccess={(reversal) => {
+            setSuccessInfo({
+              message: `Journal entry ${reversingEntry.entryNumber} reversed successfully! Reversing entry posted: ${reversal.entryNumber}`,
+              entryNumber: reversal.entryNumber,
+              journalId: reversal.id,
+              attachedCount: 0,
+            });
+            setEntries((prev) =>
+              prev.map((item) =>
+                item.id === reversingEntry.id ? { ...item, status: "REVERSED" } : item
               )
             );
             router.refresh();

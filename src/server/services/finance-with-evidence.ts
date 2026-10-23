@@ -87,7 +87,7 @@ export async function postFinancialTransactionWithEvidence(input: TransactionWit
 
   // 1. Post the appropriate double-entry financial journal
   let journal: any;
-  const refToUse = input.reference || input.idempotencyKey || undefined;
+  const refToUse = input.reference?.trim() || undefined;
 
   switch (input.action) {
     case "PARTNER_CONTRIBUTION":
