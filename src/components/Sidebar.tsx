@@ -47,6 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/finance", label: "Finance & Accounts", icon: Wallet, badge: "GL", badgeColor: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
       { href: "/partners", label: "Partner Accounts", icon: Users, badge: "20%", badgeColor: "text-afk-olive-accent bg-afk-olive/20 border-afk-olive" },
+      { href: "/ventures", label: "Ventures & Investments", icon: Layers, badge: "NEW", badgeColor: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
       { href: "/reports", label: "Reports & Drilldown", icon: BarChart3 },
     ],
   },
@@ -54,6 +55,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: "MANAGEMENT",
     items: [
       { href: "/settings", label: "System & Backups", icon: Settings },
+      { href: "/studio", label: "Customisation Studio", icon: CircleDot },
     ],
   },
 ];

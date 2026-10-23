@@ -16,6 +16,7 @@ export interface CreateJournalLineInput {
   credit: number;
   partnerId?: string;
   memo?: string;
+  ventureId?: string;
 }
 
 export interface CreateJournalEntryInput {
@@ -139,6 +140,7 @@ export async function postJournalEntry(input: CreateJournalEntryInput, txClient?
         credit: line.credit.toFixed(2),
         partnerId: line.partnerId,
         memo: line.memo,
+        ventureId: line.ventureId,
       });
     }
 

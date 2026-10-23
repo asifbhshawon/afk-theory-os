@@ -227,12 +227,14 @@ export const journalLines = pgTable(
     debit: numeric("debit", { precision: 18, scale: 2 }).notNull().default("0.00"),
     credit: numeric("credit", { precision: 18, scale: 2 }).notNull().default("0.00"),
     partnerId: uuid("partner_id").references(() => partners.id), // For partner equity/loan/drawings
+    ventureId: uuid("venture_id").references(() => ventures.id), // Dimensional project GL attribution
     memo: text("memo"),
   },
   (table) => [
     index("journal_lines_entry_idx").on(table.journalEntryId),
     index("journal_lines_account_idx").on(table.accountId),
     index("journal_lines_partner_idx").on(table.partnerId),
+    index("journal_lines_venture_idx").on(table.ventureId),
   ]
 );
 
@@ -262,6 +264,7 @@ export const collections = pgTable("collections", {
   code: text("code").notNull().unique(), // DROP01, W26
   description: text("description"),
   status: text("status").notNull().default("ACTIVE"), // PLANNING, ACTIVE, ARCHIVED
+  ventureId: uuid("venture_id").references(() => ventures.id), // Venture association
   startDate: timestamp("start_date", { withTimezone: true }),
 });
 
@@ -317,6 +320,7 @@ export const inventoryLots = pgTable(
       .references(() => productVariants.id),
     supplierId: uuid("supplier_id"), // Reference to contacts
     productionOrderId: uuid("production_order_id"), // Reference to production orders
+    ventureId: uuid("venture_id").references(() => ventures.id), // Venture funding attribution
     initialQuantity: integer("initial_quantity").notNull(),
     currentQuantity: integer("current_quantity").notNull(),
     reservedQuantity: integer("reserved_quantity").notNull().default(0),
@@ -325,7 +329,10 @@ export const inventoryLots = pgTable(
     status: text("status").notNull().default("ACTIVE"), // ACTIVE, DEPLETED, QUARANTINED
     receivedDate: timestamp("received_date", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("lots_variant_idx").on(table.variantId)]
+  (table) => [
+    index("lots_variant_idx").on(table.variantId),
+    index("lots_venture_idx").on(table.ventureId),
+  ]
 );
 
 export const stockMovements = pgTable(
@@ -482,6 +489,7 @@ export const productionOrders = pgTable("production_orders", {
   unitCostCalculated: numeric("unit_cost_calculated", { precision: 18, scale: 2 })
     .notNull()
     .default("0.00"),
+  ventureId: uuid("venture_id").references(() => ventures.id), // Venture project link
   notes: text("notes"),
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
 });
@@ -573,23 +581,32 @@ export const salesOrders = pgTable(
   ]
 );
 
-export const salesLines = pgTable("sales_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  salesOrderId: uuid("sales_order_id")
-    .notNull()
-    .references(() => salesOrders.id, { onDelete: "cascade" }),
-  variantId: uuid("variant_id")
-    .notNull()
-    .references(() => productVariants.id),
-  lotId: uuid("lot_id").references(() => inventoryLots.id),
-  quantity: integer("quantity").notNull(),
-  unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
-  discount: numeric("discount", { precision: 18, scale: 2 }).notNull().default("0.00"),
-  totalPrice: numeric("total_price", { precision: 18, scale: 2 }).notNull(),
-  cogsUnitCost: numeric("cogs_unit_cost", { precision: 18, scale: 2 })
-    .notNull()
-    .default("0.00"),
-});
+export const salesLines = pgTable(
+  "sales_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    salesOrderId: uuid("sales_order_id")
+      .notNull()
+      .references(() => salesOrders.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id),
+    lotId: uuid("lot_id").references(() => inventoryLots.id),
+    ventureId: uuid("venture_id").references(() => ventures.id), // Direct venture revenue & COGS attribution
+    quantity: integer("quantity").notNull(),
+    unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    discount: numeric("discount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    totalPrice: numeric("total_price", { precision: 18, scale: 2 }).notNull(),
+    cogsUnitCost: numeric("cogs_unit_cost", { precision: 18, scale: 2 })
+      .notNull()
+      .default("0.00"),
+  },
+  (table) => [
+    index("sales_lines_order_idx").on(table.salesOrderId),
+    index("sales_lines_lot_idx").on(table.lotId),
+    index("sales_lines_venture_idx").on(table.ventureId),
+  ]
+);
 
 export const courierSettlements = pgTable("courier_settlements", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -655,6 +672,7 @@ export const ideas = pgTable("ideas", {
   category: text("category").notNull().default("PRODUCT"), // DESIGN, MARKETING, PRODUCT, LOGISTICS
   stage: text("stage").notNull().default("CONCEPT"), // CONCEPT, REVIEW, APPROVED, REJECTED, LAUNCHED
   estimatedBudget: numeric("estimated_budget", { precision: 18, scale: 2 }),
+  ventureId: uuid("venture_id").references(() => ventures.id), // Linked venture project
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -694,4 +712,308 @@ export const settings = pgTable("settings", {
   description: text("description"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   updatedByUserId: uuid("updated_by_user_id").references(() => users.id),
+});
+
+// ==============================================================================
+// 8. VENTURES, PROJECTS & FLEXIBLE INVESTMENT ENGINE
+// ==============================================================================
+
+export const ventureTypes = pgTable("venture_types", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(), // PRODUCT_DROP, COLLECTION, INDEPENDENT_PROJECT, COLLAB, MARKETING, EXPERIMENTAL
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const ventures = pgTable(
+  "ventures",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureNumber: text("venture_number").notNull().unique(), // VENT-2026-0001
+    title: text("title").notNull(),
+    typeCode: text("type_code")
+      .notNull()
+      .references(() => ventureTypes.code),
+    stage: text("stage").notNull().default("IDEA"), // IDEA, PROPOSED, UNDER_REVIEW, APPROVED, FUNDING, ACTIVE, PRODUCTION, SELLING, RECONCILIATION, SETTLEMENT, CLOSED, ARCHIVED
+    description: text("description"),
+    targetBudget: numeric("target_budget", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    actualBudget: numeric("actual_budget", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    currency: text("currency").notNull().default("BDT"),
+    startDate: timestamp("start_date", { withTimezone: true }),
+    targetDate: timestamp("target_date", { withTimezone: true }),
+    closedDate: timestamp("closed_date", { withTimezone: true }),
+    managerUserId: uuid("manager_user_id").references(() => users.id),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("ventures_number_idx").on(table.ventureNumber),
+    index("ventures_stage_idx").on(table.stage),
+    index("ventures_type_idx").on(table.typeCode),
+  ]
+);
+
+export const ventureAgreements = pgTable(
+  "venture_agreements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    version: integer("version").notNull().default(1),
+    status: text("status").notNull().default("DRAFT"), // DRAFT, PENDING_APPROVAL, APPROVED, ACTIVE, SUPERSEDED, TERMINATED
+    participationMode: text("participation_mode").notNull().default("EQUAL"), // EQUAL, PROPORTIONAL, CUSTOM_PROFIT, FIXED_RETURN, CAPITAL_RECOVERY_FIRST, PROFIT_REINVESTMENT, MANAGEMENT_SERVICE, CUSTOM_WATERFALL
+    effectiveDate: timestamp("effective_date", { withTimezone: true }).defaultNow().notNull(),
+    waterfallRules: jsonb("waterfall_rules"), // structured rules for multi-tier allocation
+    lossRecoveryPolicy: text("loss_recovery_policy").notNull().default("PROPORTIONAL"), // PROPORTIONAL, CARRYFORWARD, CAPITAL_AT_RISK_LIMIT, PARTNER_COVERAGE
+    notes: text("notes"),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    isLocked: boolean("is_locked").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("venture_agreements_venture_idx").on(table.ventureId),
+    index("venture_agreements_status_idx").on(table.status),
+  ]
+);
+
+export const ventureParticipants = pgTable(
+  "venture_participants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    agreementId: uuid("agreement_id")
+      .notNull()
+      .references(() => ventureAgreements.id, { onDelete: "cascade" }),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    partnerId: uuid("partner_id").references(() => partners.id), // Nullable if external investor
+    contactId: uuid("contact_id").references(() => contacts.id), // For external investors
+    name: text("name").notNull(),
+    isExternal: boolean("is_external").notNull().default(false),
+    role: text("role").notNull().default("INVESTOR"), // LEAD_INVESTOR, INVESTOR, MANAGING_PARTNER, DESIGNER, OPERATOR, SUPPLIER_PARTNER, SILENT_PARTNER
+    investmentCommitment: numeric("investment_commitment", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    actualCashContributed: numeric("actual_cash_contributed", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    approvedNonCashValue: numeric("approved_non_cash_value", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    investmentPercentage: numeric("investment_percentage", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    profitSharingPercentage: numeric("profit_sharing_percentage", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    lossSharingPercentage: numeric("loss_sharing_percentage", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    capitalRecoveryPriority: integer("capital_recovery_priority").notNull().default(1),
+    votingWeight: numeric("voting_weight", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    responsibilities: text("responsibilities"),
+    status: text("status").notNull().default("ACTIVE"), // ACTIVE, WITHDRAWN, SETTLED
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("venture_participants_agreement_idx").on(table.agreementId),
+    index("venture_participants_venture_idx").on(table.ventureId),
+    index("venture_participants_partner_idx").on(table.partnerId),
+  ]
+);
+
+export const ventureContributions = pgTable(
+  "venture_contributions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    participantId: uuid("participant_id")
+      .notNull()
+      .references(() => ventureParticipants.id, { onDelete: "cascade" }),
+    contributionType: text("contribution_type").notNull().default("CASH"), // CASH, PARTNER_LOAN, COMPANY_ALLOCATION, NON_CASH_ASSET, SERVICE_EQUITY
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    description: text("description").notNull(),
+    valuationBasis: text("valuation_basis"),
+    paymentAccountId: uuid("payment_account_id").references(() => paymentAccounts.id),
+    journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
+    status: text("status").notNull().default("CONFIRMED"), // PLEDGED, CONFIRMED, REJECTED, REVERSED
+    contributedAt: timestamp("contributed_at", { withTimezone: true }).defaultNow().notNull(),
+    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id),
+    notes: text("notes"),
+  },
+  (table) => [
+    index("venture_contributions_venture_idx").on(table.ventureId),
+    index("venture_contributions_participant_idx").on(table.participantId),
+  ]
+);
+
+export const ventureCostAllocations = pgTable(
+  "venture_cost_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    allocationBasis: text("allocation_basis").notNull().default("DIRECT"), // DIRECT, PERCENTAGE, REVENUE_RATIO, UNITS_SOLD, EQUAL_SPLIT
+    memo: text("memo").notNull(),
+    allocatedAt: timestamp("allocated_at", { withTimezone: true }).defaultNow().notNull(),
+    allocatedByUserId: uuid("allocated_by_user_id").references(() => users.id),
+  },
+  (table) => [
+    index("venture_cost_allocations_venture_idx").on(table.ventureId),
+  ]
+);
+
+export const ventureProductLinks = pgTable(
+  "venture_product_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id),
+    collectionId: uuid("collection_id").references(() => collections.id),
+    notes: text("notes"),
+    linkedAt: timestamp("linked_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("venture_product_links_venture_idx").on(table.ventureId),
+    index("venture_product_links_product_idx").on(table.productId),
+  ]
+);
+
+export const ventureAllocationSnapshots = pgTable(
+  "venture_allocation_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    agreementId: uuid("agreement_id")
+      .notNull()
+      .references(() => ventureAgreements.id),
+    snapshotNumber: text("snapshot_number").notNull().unique(), // SNAP-VENT-2026-0001-01
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    grossRevenue: numeric("gross_revenue", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    returnsAndAllowances: numeric("returns_and_allowances", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    netRevenue: numeric("net_revenue", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    cogs: numeric("cogs", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    directExpenses: numeric("direct_expenses", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    sharedAllocatedExpenses: numeric("shared_allocated_expenses", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    operatingReserveRetained: numeric("operating_reserve_retained", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    netDistributable: numeric("net_distributable", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    calculationBasisJson: jsonb("calculation_basis_json").notNull(),
+    isSettled: boolean("is_settled").notNull().default(false),
+    calculatedByUserId: uuid("calculated_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("venture_snapshots_venture_idx").on(table.ventureId),
+    index("venture_snapshots_number_idx").on(table.snapshotNumber),
+  ]
+);
+
+export const ventureSettlements = pgTable(
+  "venture_settlements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    settlementNumber: text("settlement_number").notNull().unique(), // SETTL-VENT-2026-0001-01
+    ventureId: uuid("venture_id")
+      .notNull()
+      .references(() => ventures.id, { onDelete: "cascade" }),
+    snapshotId: uuid("snapshot_id")
+      .notNull()
+      .references(() => ventureAllocationSnapshots.id),
+    settlementType: text("settlement_type").notNull().default("FULL"), // FULL, PARTIAL, PROFIT_ONLY, CAPITAL_RECOVERY, REINVESTMENT, LOSS_CARRYFORWARD
+    totalAmount: numeric("total_amount", { precision: 18, scale: 2 }).notNull(),
+    paymentAccountId: uuid("payment_account_id").references(() => paymentAccounts.id),
+    journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
+    status: text("status").notNull().default("DRAFT"), // DRAFT, APPROVED, PAID, REINVESTED, CANCELLED, REVERSED
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("venture_settlements_venture_idx").on(table.ventureId),
+    index("venture_settlements_number_idx").on(table.settlementNumber),
+  ]
+);
+
+export const ventureSettlementLines = pgTable(
+  "venture_settlement_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    settlementId: uuid("settlement_id")
+      .notNull()
+      .references(() => ventureSettlements.id, { onDelete: "cascade" }),
+    participantId: uuid("participant_id")
+      .notNull()
+      .references(() => ventureParticipants.id),
+    grossEntitlement: numeric("gross_entitlement", { precision: 18, scale: 2 }).notNull(),
+    capitalRecovered: numeric("capital_recovered", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    profitDistributed: numeric("profit_distributed", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    lossesCarriedForward: numeric("losses_carried_forward", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    reinvestedAmount: numeric("reinvested_amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    netCashPaid: numeric("net_cash_paid", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    paymentReference: text("payment_reference"),
+    status: text("status").notNull().default("PENDING"), // PENDING, PAID, REINVESTED, CANCELLED
+  },
+  (table) => [
+    index("venture_settlement_lines_settlement_idx").on(table.settlementId),
+    index("venture_settlement_lines_participant_idx").on(table.participantId),
+  ]
+);
+
+// ==============================================================================
+// 9. BUSINESS CUSTOMISATION STUDIO (CUSTOM FIELDS & WORKFLOWS)
+// ==============================================================================
+
+export const customFieldDefinitions = pgTable(
+  "custom_field_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entityType: text("entity_type").notNull(), // VENTURE, PRODUCT, SUPPLIER, ORDER, PARTNER, BATCH
+    fieldKey: text("field_key").notNull(), // e.g. fabric_composition
+    fieldLabel: text("field_label").notNull(),
+    dataType: text("data_type").notNull(), // TEXT, NUMBER, DECIMAL, MONEY, PERCENTAGE, DATE, SELECT, CHECKBOX, URL
+    options: jsonb("options"), // for select options
+    isRequired: boolean("is_required").notNull().default(false),
+    defaultValue: text("default_value"),
+    helpText: text("help_text"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("custom_fields_entity_idx").on(table.entityType),
+    index("custom_fields_key_idx").on(table.entityType, table.fieldKey),
+  ]
+);
+
+export const customFieldValues = pgTable(
+  "custom_field_values",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    definitionId: uuid("definition_id")
+      .notNull()
+      .references(() => customFieldDefinitions.id, { onDelete: "cascade" }),
+    entityId: text("entity_id").notNull(), // UUID of the venture, product, etc.
+    valueText: text("value_text"),
+    valueNumeric: numeric("value_numeric", { precision: 18, scale: 4 }),
+    valueDate: timestamp("value_date", { withTimezone: true }),
+    valueJson: jsonb("value_json"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("custom_values_entity_idx").on(table.entityId),
+    index("custom_values_def_idx").on(table.definitionId),
+  ]
+);
+
+export const workflowDefinitions = pgTable("workflow_definitions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workflowType: text("workflow_type").notNull().unique(), // VENTURE_APPROVAL, SETTLEMENT_PAYOUT, AGREEMENT_AMENDMENT, CAPITAL_WITHDRAWAL
+  name: text("name").notNull(),
+  description: text("description"),
+  stagesJson: jsonb("stages_json").notNull(), // stages, approver roles, amount thresholds, self-approval restriction
+  isActive: boolean("is_active").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

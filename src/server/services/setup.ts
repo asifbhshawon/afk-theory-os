@@ -8,6 +8,8 @@ import {
   users,
   userRoles,
   settings,
+  ventureTypes,
+  workflowDefinitions,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, generateSecurePassword } from "@/lib/auth";
@@ -87,6 +89,57 @@ export const INITIAL_PARTNERS = [
   { name: "Tousif", email: "tousif@afktheory.local", ownershipPct: "20.00", profitSharePct: "20.00", roles: ["INVENTORY_MGR", "PARTNER_VIEWER"] },
   { name: "Midhat", email: "midhat@afktheory.local", ownershipPct: "20.00", profitSharePct: "20.00", roles: ["MFG_MGR", "PARTNER_VIEWER"] },
   { name: "Mueid", email: "mueid@afktheory.local", ownershipPct: "20.00", profitSharePct: "20.00", roles: ["SALES_OP", "PARTNER_VIEWER"] },
+];
+
+export const INITIAL_VENTURE_TYPES = [
+  { code: "PRODUCT_DROP", name: "Product Drop", description: "Standalone product release or seasonal drop", defaultMode: "PROPORTIONAL_CAPITAL" },
+  { code: "COLLECTION", name: "Collection", description: "Multi-product seasonal apparel collection", defaultMode: "PROPORTIONAL_CAPITAL" },
+  { code: "INDEPENDENT_PROJECT", name: "Independent Project", description: "Project with segregated funding pool and custom waterfall", defaultMode: "CUSTOM_PROFIT_SPLIT" },
+  { code: "COLLAB", name: "Brand Collaboration", description: "Venture co-produced with an external brand or designer", defaultMode: "REINVESTMENT" },
+  { code: "MARKETING", name: "Marketing Campaign", description: "Dedicated campaign, photoshoot, or influencer pool", defaultMode: "EQUAL_SPLIT" },
+  { code: "EXPERIMENTAL", name: "Experimental / R&D", description: "Sample prototyping, R&D, or innovative fabric experiment", defaultMode: "CAPITAL_RECOVERY_FIRST" },
+];
+
+export const INITIAL_WORKFLOW_DEFINITIONS = [
+  {
+    workflowType: "VENTURE_APPROVAL",
+    name: "Standard Venture Lifecycle",
+    description: "Multi-stage approval and lifecycle workflow for ventures",
+    stagesJson: {
+      stages: ["IDEA", "PLANNING", "DRAFT_AGREEMENT", "ACTIVE", "COMPLETED", "SETTLED", "ARCHIVED"],
+      allowedTransitions: {
+        IDEA: ["PLANNING", "ARCHIVED"],
+        PLANNING: ["DRAFT_AGREEMENT", "ARCHIVED"],
+        DRAFT_AGREEMENT: ["ACTIVE", "PLANNING", "ARCHIVED"],
+        ACTIVE: ["COMPLETED", "ARCHIVED"],
+        COMPLETED: ["SETTLED", "ACTIVE"],
+        SETTLED: ["ARCHIVED"],
+        ARCHIVED: ["PLANNING"],
+      },
+      requiredRoleToAdvance: {
+        ACTIVE: "FINANCE_APPROVER",
+        SETTLED: "FINANCE_APPROVER",
+      },
+    },
+  },
+  {
+    workflowType: "SETTLEMENT_PAYOUT",
+    name: "Waterfall Settlement Workflow",
+    description: "Two-step authorization workflow for waterfall distributions",
+    stagesJson: {
+      stages: ["DRAFT", "PENDING_APPROVAL", "APPROVED", "DISBURSED"],
+      allowedTransitions: {
+        DRAFT: ["PENDING_APPROVAL"],
+        PENDING_APPROVAL: ["APPROVED", "DRAFT"],
+        APPROVED: ["DISBURSED"],
+        DISBURSED: [],
+      },
+      requiredRoleToAdvance: {
+        APPROVED: "FINANCE_APPROVER",
+        DISBURSED: "FINANCE_MGR",
+      },
+    },
+  },
 ];
 
 export async function isSystemInitialized(): Promise<boolean> {
@@ -220,6 +273,22 @@ export async function initializeSystem(partnerPasswords?: Record<string, string>
           roleCode,
         });
       }
+    }
+  }
+
+  // 7. Seed Venture Types
+  for (const vt of INITIAL_VENTURE_TYPES) {
+    const existing = await db.select().from(ventureTypes).where(eq(ventureTypes.code, vt.code)).limit(1);
+    if (existing.length === 0) {
+      await db.insert(ventureTypes).values(vt);
+    }
+  }
+
+  // 8. Seed Workflow Definitions
+  for (const wf of INITIAL_WORKFLOW_DEFINITIONS) {
+    const existing = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.workflowType, wf.workflowType)).limit(1);
+    if (existing.length === 0) {
+      await db.insert(workflowDefinitions).values(wf);
     }
   }
 
