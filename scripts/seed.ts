@@ -8,7 +8,14 @@ async function main() {
   console.log(`System initialized: ${initialized}`);
 
   console.log("Running initialization and partner provisioning...");
-  const initResult = await initializeSystem();
+  const defaultPartnerPasswords: Record<string, string> = {
+    Shawon: process.env.INITIAL_ADMIN_PASSWORD || "Afk@Shawon2026!",
+    Rafi: "Afk@Rafi2026!",
+    Tousif: "Afk@Tousif2026!",
+    Midhat: "Afk@Midhat2026!",
+    Mueid: "Afk@Mueid2026!",
+  };
+  const initResult = await initializeSystem(defaultPartnerPasswords);
 
   if (initResult.credentials && initResult.credentials.length > 0) {
     console.log("\n=======================================================");
