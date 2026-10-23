@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { accounts, journalEntries, paymentAccounts, partners } from "@/db/schema";
-import { desc, eq, asc } from "drizzle-orm";
+import { accounts, journalEntries, journalLines, paymentAccounts, partners } from "@/db/schema";
+import { desc, eq, asc, inArray } from "drizzle-orm";
 import {
   getFinancialStatements,
   createCustomExpenseCategory,
@@ -38,14 +38,51 @@ export default async function FinancePage() {
     .orderBy(desc(journalEntries.date), desc(journalEntries.entryNumber))
     .limit(50);
 
-  // Batch fetch evidence for these journal entries
+  // Batch fetch evidence and lines for these journal entries
   const entryIds = rawEntries.map((e) => e.id);
   const evidenceMap = await getEvidenceForEntities("JOURNAL_ENTRY", entryIds);
+  const lines = entryIds.length > 0 ? await db
+    .select({
+      journalEntryId: journalLines.journalEntryId,
+      accountId: journalLines.accountId,
+      debit: journalLines.debit,
+      credit: journalLines.credit,
+      partnerId: journalLines.partnerId,
+      memo: journalLines.memo,
+    })
+    .from(journalLines)
+    .where(inArray(journalLines.journalEntryId, entryIds)) : [];
 
-  const entriesWithEvidence = rawEntries.map((e) => ({
-    ...e,
-    evidence: evidenceMap[e.id] || [],
-  }));
+  const tradePayablesAcc = allAccounts.find((a) => a.code === "2010");
+
+  const entriesWithEvidence = rawEntries.map((e) => {
+    const entryLines = lines.filter((l) => l.journalEntryId === e.id);
+    const amount = entryLines.reduce(
+      (max, l) => Math.max(max, Number(l.debit), Number(l.credit)),
+      0
+    );
+
+    const debitLine = entryLines.find((l) => Number(l.debit) > 0);
+    const creditLine = entryLines.find((l) => Number(l.credit) > 0);
+
+    const payAcc = creditLine
+      ? payAccounts.find((p) => p.glAccountId === creditLine.accountId)
+      : undefined;
+
+    const isSupplier = creditLine && tradePayablesAcc
+      ? creditLine.accountId === tradePayablesAcc.id
+      : false;
+
+    return {
+      ...e,
+      amount,
+      expenseAccountId: debitLine?.accountId,
+      partnerId: creditLine?.partnerId,
+      paymentAccountId: payAcc?.id,
+      isSupplierPayable: isSupplier,
+      evidence: evidenceMap[e.id] || [],
+    };
+  });
 
   // Server action to add a new custom expense category to Chart of Accounts
   async function handleCreateCategory(formData: FormData) {

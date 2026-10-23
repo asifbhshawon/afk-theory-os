@@ -83,6 +83,30 @@ export function PartnerWorkspaceClient({
     "CONTRIBUTION" | "LOAN" | "DRAWING" | "REIMBURSEMENT"
   >("CONTRIBUTION");
 
+  // Table view filter: "ACTIVE" vs "ALL"
+  const [viewMode, setViewMode] = useState<"ACTIVE" | "ALL">("ACTIVE");
+  const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
+
+  const handleLoadForCorrection = (tx: TransactionHistoryItem) => {
+    setCorrectionNotice(
+      `Loaded details from ${tx.entryNumber}. Adjust amounts or accounts and save to post your correction.`
+    );
+    if (tx.entryType === "PARTNER_LOAN") {
+      setActiveTab("LOAN");
+      if (tx.partnerId) setLoanPartnerId(tx.partnerId);
+      if (tx.amount) setLoanAmount(tx.amount.toString());
+      if (tx.reference) setLoanReference(tx.reference);
+      if (tx.description) setLoanDescription(tx.description);
+    } else {
+      setActiveTab("CONTRIBUTION");
+      if (tx.partnerId) setContribPartnerId(tx.partnerId);
+      if (tx.amount) setContribAmount(tx.amount.toString());
+      if (tx.reference) setContribReference(tx.reference);
+      if (tx.description) setContribDescription(tx.description);
+    }
+    window.scrollTo({ top: 200, behavior: "smooth" });
+  };
+
   // Form states:
   // Form 1: Capital Contribution
   const [contribPartnerId, setContribPartnerId] = useState("");
@@ -294,6 +318,23 @@ export function PartnerWorkspaceClient({
             className="text-red-400 hover:text-red-300 font-bold px-2 py-0.5"
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Correction Notice Banner if loaded from a previous mistake */}
+      {correctionNotice && (
+        <div className="p-3 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>{correctionNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCorrectionNotice(null)}
+            className="px-2 py-0.5 rounded text-[11px] bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite border border-afk-border cursor-pointer"
+          >
+            Dismiss
           </button>
         </div>
       )}
@@ -890,10 +931,55 @@ export function PartnerWorkspaceClient({
             </p>
           </div>
 
-          <span className="text-xs font-mono text-afk-muted bg-afk-surface px-2.5 py-1 rounded border border-afk-border">
-            {history.length} transactions recorded
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-afk-surface p-0.5 rounded-lg border border-afk-border text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("ACTIVE")}
+                className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === "ACTIVE"
+                    ? "bg-afk-charcoal text-afk-offwhite font-bold shadow-sm"
+                    : "text-afk-muted hover:text-afk-offwhite"
+                }`}
+              >
+                <span>Active</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-afk-olive/20 text-afk-olive-light text-[10px]">
+                  {history.filter((h) => h.status !== "REVERSED" && h.entryType !== "REVERSAL").length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("ALL")}
+                className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === "ALL"
+                    ? "bg-afk-charcoal text-afk-offwhite font-bold shadow-sm"
+                    : "text-afk-muted hover:text-afk-offwhite"
+                }`}
+              >
+                <span>Audit Trail</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-afk-border text-afk-muted text-[10px]">
+                  {history.length}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
+
+        {viewMode === "ACTIVE" && history.some((h) => h.status === "REVERSED" || h.entryType === "REVERSAL") && (
+          <div className="p-2.5 rounded bg-afk-surface/60 border border-afk-border text-[11px] text-afk-muted flex items-center justify-between">
+            <span>
+              💡 Cancelled and offset reversal transactions are hidden in Active View to keep your partner records clean.
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewMode("ALL")}
+              className="text-amber-400 hover:text-amber-300 font-medium cursor-pointer underline ml-2 shrink-0"
+            >
+              View Full Audit Trail
+            </button>
+          </div>
+        )}
 
         {/* History Table */}
         <div className="overflow-x-auto">
@@ -911,131 +997,178 @@ export function PartnerWorkspaceClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-afk-border/40 font-mono">
-              {history.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-afk-muted font-sans">
-                    No partner transactions posted yet. Use the forms above to post a contribution or advance.
-                  </td>
-                </tr>
-              ) : (
-                history.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-afk-surface/40 transition-colors">
-                    <td className="py-2.5 text-afk-muted">
-                      {new Date(tx.date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </td>
+              {(() => {
+                const displayedHistory =
+                  viewMode === "ACTIVE"
+                    ? history.filter((h) => h.status !== "REVERSED" && h.entryType !== "REVERSAL")
+                    : history;
 
-                    <td className="py-2.5 font-sans font-semibold text-afk-offwhite">
-                      {tx.partnerName || "—"}
-                    </td>
+                if (displayedHistory.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-afk-muted font-sans">
+                        No transactions to display in this view.
+                      </td>
+                    </tr>
+                  );
+                }
 
-                    <td className="py-2.5">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-sans font-semibold ${
-                          tx.entryType === "CAPITAL_DEPOSIT"
-                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                            : tx.entryType === "PARTNER_LOAN"
-                            ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                            : tx.entryType === "PARTNER_DRAWINGS"
-                            ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
-                            : "bg-sky-500/15 text-sky-400 border border-sky-500/30"
+                return displayedHistory.map((tx) => {
+                  const isReversal = tx.entryType === "REVERSAL";
+                  const isReversed = tx.status === "REVERSED";
+
+                  return (
+                    <tr
+                      key={tx.id}
+                      className={`hover:bg-afk-surface/40 transition-colors ${
+                        isReversed ? "opacity-60 bg-red-500/[0.02]" : isReversal ? "bg-amber-500/[0.02]" : ""
+                      }`}
+                    >
+                      <td className="py-2.5 text-afk-muted">
+                        {new Date(tx.date).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </td>
+
+                      <td className="py-2.5 font-sans font-semibold text-afk-offwhite">
+                        {tx.partnerName || "—"}
+                      </td>
+
+                      <td className="py-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-sans font-semibold border ${
+                            isReversal
+                              ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                              : tx.entryType === "CAPITAL_DEPOSIT"
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              : tx.entryType === "PARTNER_LOAN"
+                              ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                              : tx.entryType === "PARTNER_DRAWINGS"
+                              ? "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                              : "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                          }`}
+                        >
+                          {isReversal ? "OFFSET / REVERSAL" : tx.entryType.replace(/_/g, " ")}
+                        </span>
+                      </td>
+
+                      <td
+                        className={`py-2.5 font-sans max-w-xs truncate ${
+                          isReversed
+                            ? "line-through text-afk-muted"
+                            : isReversal
+                            ? "text-amber-300/90"
+                            : "text-afk-offwhite"
                         }`}
+                        title={tx.description}
                       >
-                        {tx.entryType.replace(/_/g, " ")}
-                      </span>
-                    </td>
+                        {tx.description}
+                      </td>
 
-                    <td className="py-2.5 text-afk-offwhite font-sans max-w-xs truncate" title={tx.description}>
-                      {tx.description}
-                    </td>
+                      <td className="py-2.5 text-afk-muted font-sans text-[11px]">
+                        {tx.reference || "—"}
+                      </td>
 
-                    <td className="py-2.5 text-afk-muted font-sans text-[11px]">
-                      {tx.reference || "—"}
-                    </td>
+                      <td className="py-2.5 text-right font-bold text-afk-offwhite">
+                        ৳{tx.amount.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
+                      </td>
 
-                    <td className="py-2.5 text-right font-bold text-afk-offwhite">
-                      ৳{tx.amount.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
-                    </td>
-
-                    {/* Supporting Proof indicator */}
-                    <td className="py-2.5 text-center font-sans">
-                      {tx.evidence && tx.evidence.length > 0 ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openViewerForTransaction(tx.evidence)}
-                            className="px-2 py-0.5 rounded-full bg-afk-surface hover:bg-afk-border text-afk-olive hover:text-afk-olive-light text-[10px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
-                            title="Click to view attached proof in lightbox"
-                          >
-                            <Paperclip className="w-3 h-3 text-afk-olive" />
-                            <span>
-                              {tx.evidence.length} {tx.evidence.length === 1 ? "proof" : "proofs"}
-                            </span>
-                          </button>
-
-                          {/* Quick thumbnail badge if first is image */}
-                          {tx.evidence[0]?.thumbnailUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={tx.evidence[0].thumbnailUrl}
-                              alt="Proof thumb"
+                      {/* Supporting Proof indicator */}
+                      <td className="py-2.5 text-center font-sans">
+                        {tx.evidence && tx.evidence.length > 0 ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
                               onClick={() => openViewerForTransaction(tx.evidence)}
-                              className="w-5 h-5 rounded object-cover border border-afk-border cursor-pointer hover:scale-110 transition"
-                              title="Click to view full size"
-                            />
+                              className="px-2 py-0.5 rounded-full bg-afk-surface hover:bg-afk-border text-afk-olive hover:text-afk-olive-light text-[10px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
+                              title="Click to view attached proof in lightbox"
+                            >
+                              <Paperclip className="w-3 h-3 text-afk-olive" />
+                              <span>
+                                {tx.evidence.length} {tx.evidence.length === 1 ? "proof" : "proofs"}
+                              </span>
+                            </button>
+
+                            {/* Quick thumbnail badge if first is image */}
+                            {tx.evidence[0]?.thumbnailUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={tx.evidence[0].thumbnailUrl}
+                                alt="Proof thumb"
+                                onClick={() => openViewerForTransaction(tx.evidence)}
+                                className="w-5 h-5 rounded object-cover border border-afk-border cursor-pointer hover:scale-110 transition"
+                                title="Click to view full size"
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-afk-muted text-[10px] italic">No proof</span>
+                        )}
+                      </td>
+
+                      {/* Actions: Add Proof, Voucher, Re-enter, Reverse */}
+                      <td className="py-2.5 text-right font-sans">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!isReversed && !isReversal && (
+                            <button
+                              type="button"
+                              onClick={() => setAddProofTx(tx)}
+                              className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
+                              title="Attach proof to this transaction"
+                            >
+                              <Paperclip className="w-3 h-3 text-afk-olive" />
+                              <span>Add Proof</span>
+                            </button>
+                          )}
+
+                          <Link
+                            href={`/print/voucher/${tx.id}`}
+                            target="_blank"
+                            className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition"
+                            title="Open printable voucher"
+                          >
+                            <FileText className="w-3 h-3 text-afk-olive-accent" />
+                            <span>Voucher</span>
+                          </Link>
+
+                          {isReversal ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] text-amber-300/70 bg-amber-500/10 border border-amber-500/20 font-medium">
+                              Offset
+                            </span>
+                          ) : isReversed ? (
+                            <div className="flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 font-medium">
+                                Reversed
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleLoadForCorrection(tx)}
+                                className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                                title="Load this transaction's details into the form to make corrections"
+                              >
+                                <RotateCcw className="w-3 h-3 text-amber-400" />
+                                <span>Re-enter / Correct</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setReversingTx(tx)}
+                              className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                              title="Reverse this transaction and cancel accounting impact"
+                            >
+                              <RotateCcw className="w-3 h-3 text-amber-400" />
+                              <span>Reverse</span>
+                            </button>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-afk-muted text-[10px] italic">No proof</span>
-                      )}
-                    </td>
-
-                    {/* Actions: Add Proof, Voucher, Reverse */}
-                    <td className="py-2.5 text-right font-sans">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setAddProofTx(tx)}
-                          className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
-                          title="Attach proof to this transaction"
-                        >
-                          <Paperclip className="w-3 h-3 text-afk-olive" />
-                          <span>Add Proof</span>
-                        </button>
-
-                        <Link
-                          href={`/print/voucher/${tx.id}`}
-                          target="_blank"
-                          className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition"
-                          title="Open printable voucher"
-                        >
-                          <FileText className="w-3 h-3 text-afk-olive-accent" />
-                          <span>Voucher</span>
-                        </Link>
-
-                        {tx.status === "REVERSED" ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 font-medium">
-                            Reversed
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setReversingTx(tx)}
-                            className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
-                            title="Reverse this transaction and cancel accounting impact"
-                          >
-                            <RotateCcw className="w-3 h-3 text-amber-400" />
-                            <span>Reverse</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -1082,17 +1215,33 @@ export function PartnerWorkspaceClient({
           transaction={reversingTx}
           onSuccess={(reversal) => {
             setSuccessInfo({
-              message: `Transaction ${reversingTx.entryNumber} reversed successfully! Reversing entry posted: ${reversal.entryNumber}`,
+              message: `Transaction ${reversingTx.entryNumber} reversed successfully! Offset entry posted: ${reversal.entryNumber}`,
               entryNumber: reversal.entryNumber,
               journalId: reversal.id,
               attachedCount: 0,
             });
-            setHistory((prev) =>
-              prev.map((item) =>
+            setHistory((prev) => [
+              {
+                id: reversal.id,
+                entryNumber: reversal.entryNumber,
+                date: new Date(),
+                entryType: "REVERSAL",
+                description: reversal.description,
+                reference: reversingTx.entryNumber,
+                status: "POSTED",
+                amount: reversingTx.amount,
+                partnerId: reversingTx.partnerId,
+                partnerName: reversingTx.partnerName,
+                evidence: [],
+              },
+              ...prev.map((item) =>
                 item.id === reversingTx.id ? { ...item, status: "REVERSED" } : item
-              )
-            );
+              ),
+            ]);
             router.refresh();
+          }}
+          onCorrect={(tx) => {
+            handleLoadForCorrection(tx);
           }}
         />
       )}

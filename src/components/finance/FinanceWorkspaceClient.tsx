@@ -52,6 +52,11 @@ interface JournalEntryItem {
   description: string;
   reference?: string | null;
   status: string;
+  amount?: number;
+  expenseAccountId?: string;
+  partnerId?: string | null;
+  paymentAccountId?: string | null;
+  isSupplierPayable?: boolean;
   evidence: ViewerDocument[];
 }
 
@@ -71,6 +76,7 @@ export function FinanceWorkspaceClient({
   canManage,
 }: FinanceWorkspaceClientProps) {
   const router = useRouter();
+  const formRef = React.useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<JournalEntryItem[]>(initialEntries);
 
   // Success & Error alerts
@@ -81,11 +87,14 @@ export function FinanceWorkspaceClient({
     attachedCount: number;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
 
   // Form 1: Business Expense
   const [expenseAccountId, setExpenseAccountId] = useState("");
   const [customCategoryName, setCustomCategoryName] = useState("");
-  const [fundingSource, setFundingSource] = useState("");
+  const [fundingMode, setFundingMode] = useState<"COMPANY" | "PARTNER" | "SUPPLIER">("COMPANY");
+  const [selectedCompanyAccountId, setSelectedCompanyAccountId] = useState(paymentAccounts[0]?.id || "");
+  const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id || "");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseReference, setExpenseReference] = useState("");
@@ -99,6 +108,9 @@ export function FinanceWorkspaceClient({
   const [transferReference, setTransferReference] = useState("");
   const [transferStagedFiles, setTransferStagedFiles] = useState<StagedFile[]>([]);
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+
+  // Table view filter: "ACTIVE" (hides reversed & offsets) vs "ALL" (full GAAP audit trail)
+  const [viewMode, setViewMode] = useState<"ACTIVE" | "ALL">("ACTIVE");
 
   // Lightbox viewer modal state
   const [viewerDocs, setViewerDocs] = useState<ViewerDocument[]>([]);
@@ -117,6 +129,35 @@ export function FinanceWorkspaceClient({
     setIsViewerOpen(true);
   };
 
+  // Pre-fill form from a transaction to make quick correction
+  const handleLoadForCorrection = (tx: JournalEntryItem) => {
+    setCorrectionNotice(
+      `Loaded details from ${tx.entryNumber}. Adjust the funding source / amount and click "Review & Post Expense" to post your corrected entry.`
+    );
+    if (tx.amount) {
+      setExpenseAmount(tx.amount.toString());
+    }
+    if (tx.description) {
+      setExpenseDescription(tx.description);
+    }
+    if (tx.reference) {
+      setExpenseReference(tx.reference);
+    }
+    if (tx.expenseAccountId) {
+      setExpenseAccountId(tx.expenseAccountId);
+    }
+    if (tx.partnerId) {
+      setFundingMode("PARTNER");
+      setSelectedPartnerId(tx.partnerId);
+    } else if (tx.isSupplierPayable) {
+      setFundingMode("SUPPLIER");
+    } else if (tx.paymentAccountId) {
+      setFundingMode("COMPANY");
+      setSelectedCompanyAccountId(tx.paymentAccountId);
+    }
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Submit Business Expense with Evidence
   const handleSubmitExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,24 +167,22 @@ export function FinanceWorkspaceClient({
     const numAmount = parseFloat(expenseAmount);
     if (
       (!expenseAccountId && !customCategoryName) ||
-      !fundingSource ||
       isNaN(numAmount) ||
       numAmount <= 0 ||
       !expenseDescription
     ) {
-      setErrorMessage("Please fill all required fields (Category, Funding Source, Amount, Description).");
+      setErrorMessage("Please fill all required fields (Category, Amount, Description).");
       return;
     }
 
-    let paymentAccountId: string | undefined;
-    let partnerId: string | undefined;
+    if (fundingMode === "COMPANY" && !selectedCompanyAccountId) {
+      setErrorMessage("Please select a company payment account.");
+      return;
+    }
 
-    if (fundingSource.startsWith("partner_")) {
-      partnerId = fundingSource.replace("partner_", "");
-    } else if (fundingSource.startsWith("pay_")) {
-      paymentAccountId = fundingSource.replace("pay_", "");
-    } else {
-      paymentAccountId = fundingSource;
+    if (fundingMode === "PARTNER" && !selectedPartnerId) {
+      setErrorMessage("Please select the partner who paid personally.");
+      return;
     }
 
     setIsSubmittingExpense(true);
@@ -156,8 +195,15 @@ export function FinanceWorkspaceClient({
       } else if (expenseAccountId) {
         formData.append("expenseAccountId", expenseAccountId);
       }
-      if (paymentAccountId) formData.append("paymentAccountId", paymentAccountId);
-      if (partnerId) formData.append("partnerId", partnerId);
+
+      if (fundingMode === "PARTNER") {
+        formData.append("partnerId", selectedPartnerId);
+      } else if (fundingMode === "SUPPLIER") {
+        formData.append("isSupplierPayable", "true");
+      } else {
+        formData.append("paymentAccountId", selectedCompanyAccountId);
+      }
+
       formData.append("amount", numAmount.toString());
       formData.append("description", expenseDescription.trim());
       if (expenseReference) formData.append("reference", expenseReference.trim());
@@ -180,16 +226,18 @@ export function FinanceWorkspaceClient({
 
       const attachedCount = data.documents?.length || 0;
       setSuccessInfo({
-        message: "Business Expense posted successfully!",
+        message: correctionNotice
+          ? "Corrected Business Expense posted successfully!"
+          : "Business Expense posted successfully!",
         entryNumber: data.journal.entryNumber,
         journalId: data.journal.id,
         attachedCount,
       });
 
-      // Reset form
+      // Reset form & correction notice
+      setCorrectionNotice(null);
       setExpenseAccountId("");
       setCustomCategoryName("");
-      setFundingSource("");
       setExpenseAmount("");
       setExpenseDescription("");
       setExpenseReference("");
@@ -206,6 +254,11 @@ export function FinanceWorkspaceClient({
         description: expenseDescription,
         reference: expenseReference || null,
         status: "POSTED",
+        amount: numAmount,
+        expenseAccountId,
+        partnerId: fundingMode === "PARTNER" ? selectedPartnerId : null,
+        paymentAccountId: fundingMode === "COMPANY" ? selectedCompanyAccountId : null,
+        isSupplierPayable: fundingMode === "SUPPLIER",
         evidence: data.documents || [],
       };
       setEntries((prev) => [newEntry, ...prev]);
@@ -354,7 +407,7 @@ export function FinanceWorkspaceClient({
       {/* Action Forms Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Record Business Expense Quick Form */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div ref={formRef} className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <Receipt className="w-4 h-4 text-afk-olive" />
@@ -363,15 +416,32 @@ export function FinanceWorkspaceClient({
                   Record Business Expense Quick Form
                 </h3>
                 <p className="text-[11px] text-afk-muted">
-                  Operating expenses, factory advances, studio rent or partner reimbursables with receipts.
+                  Operating expenses, factory advances, studio rent, partner reimbursables, or supplier bills with receipts.
                 </p>
               </div>
             </div>
 
+            {/* Correction Banner if loaded from a previous mistake */}
+            {correctionNotice && (
+              <div className="p-3 my-3 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>{correctionNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCorrectionNotice(null)}
+                  className="px-2 py-0.5 rounded text-[11px] bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite border border-afk-border cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSubmitExpense} className="space-y-3 pt-3 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] text-afk-muted mb-1 font-medium">Expense Category</label>
+                  <label className="block text-[11px] text-afk-muted mb-1 font-medium">Expense Category *</label>
                   <select
                     value={expenseAccountId}
                     onChange={(e) => setExpenseAccountId(e.target.value)}
@@ -389,29 +459,91 @@ export function FinanceWorkspaceClient({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-afk-muted mb-1 font-medium">Paid From / Reimbursable</label>
-                  <select
-                    value={fundingSource}
-                    onChange={(e) => setFundingSource(e.target.value)}
-                    required
-                    className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
-                  >
-                    <option value="">Select Funding Source...</option>
-                    <optgroup label="Company Cash & Accounts">
-                      {paymentAccounts.map((pa) => (
-                        <option key={pa.id} value={`pay_${pa.id}`}>
-                          {pa.name} ({pa.type})
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Paid Personally by Partner (Reimbursable)">
-                      {partners.map((p) => (
-                        <option key={p.id} value={`partner_${p.id}`}>
-                          Paid by {p.name} (Due to Partner)
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <label className="block text-[11px] text-afk-muted mb-1 font-medium">Payment / Due Source *</label>
+                  <div className="grid grid-cols-3 gap-1 p-0.5 bg-afk-surface/80 border border-afk-border rounded mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setFundingMode("COMPANY")}
+                      className={`py-1 px-1 rounded text-[10px] font-medium transition cursor-pointer text-center ${
+                        fundingMode === "COMPANY"
+                          ? "bg-afk-olive/25 text-afk-olive-light border border-afk-olive/50 font-bold"
+                          : "text-afk-muted hover:text-afk-offwhite"
+                      }`}
+                      title="Paid immediately from company bank or cash"
+                    >
+                      🏢 Company
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFundingMode("PARTNER")}
+                      className={`py-1 px-1 rounded text-[10px] font-medium transition cursor-pointer text-center ${
+                        fundingMode === "PARTNER"
+                          ? "bg-amber-500/25 text-amber-300 border border-amber-500/50 font-bold"
+                          : "text-afk-muted hover:text-afk-offwhite"
+                      }`}
+                      title="Paid personally by partner (Due to Partner)"
+                    >
+                      👤 Due to Partner
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFundingMode("SUPPLIER")}
+                      className={`py-1 px-1 rounded text-[10px] font-medium transition cursor-pointer text-center ${
+                        fundingMode === "SUPPLIER"
+                          ? "bg-blue-500/25 text-blue-300 border border-blue-500/50 font-bold"
+                          : "text-afk-muted hover:text-afk-offwhite"
+                      }`}
+                      title="Recorded as an unpaid supplier invoice"
+                    >
+                      ⏳ Due / Baki
+                    </button>
+                  </div>
+
+                  {fundingMode === "COMPANY" && (
+                    <div>
+                      <select
+                        value={selectedCompanyAccountId}
+                        onChange={(e) => setSelectedCompanyAccountId(e.target.value)}
+                        required
+                        className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                      >
+                        <option value="">Select Company Account...</option>
+                        {paymentAccounts.map((pa) => (
+                          <option key={pa.id} value={pa.id}>
+                            {pa.name} ({pa.type})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-afk-muted mt-1">Deducted from company bank/cash balance.</p>
+                    </div>
+                  )}
+
+                  {fundingMode === "PARTNER" && (
+                    <div>
+                      <select
+                        value={selectedPartnerId}
+                        onChange={(e) => setSelectedPartnerId(e.target.value)}
+                        required
+                        className="w-full bg-afk-surface border border-amber-500/50 rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="">Select Partner who paid personally...</option>
+                        {partners.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            Paid by {p.name} (Due to {p.name})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-amber-300/90 mt-1">
+                        Company owes this to partner (Liability / Due to Partner). No bank/cash deducted.
+                      </p>
+                    </div>
+                  )}
+
+                  {fundingMode === "SUPPLIER" && (
+                    <div className="p-2 rounded bg-blue-500/10 border border-blue-500/30 text-[11px] text-blue-300">
+                      Recorded as an unpaid supplier bill (Trade Payables 2010). Company bank/cash is not deducted.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -612,7 +744,7 @@ export function FinanceWorkspaceClient({
 
       {/* Posted Journal Entries Table with Evidence Badges and Add Proof */}
       <div className="bg-afk-charcoal rounded-xl border border-afk-border p-5 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-afk-border/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-afk-border/60">
           <div>
             <h3 className="text-sm font-semibold text-afk-offwhite">
               General Ledger Journal Entries
@@ -621,10 +753,56 @@ export function FinanceWorkspaceClient({
               Balanced transactions with audit trail and linked supporting documentation.
             </p>
           </div>
-          <span className="text-xs font-mono text-afk-muted">
-            {entries.length} posted entries
-          </span>
+
+          <div className="flex items-center gap-2">
+            <div className="flex bg-afk-surface p-0.5 rounded-lg border border-afk-border text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("ACTIVE")}
+                className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === "ACTIVE"
+                    ? "bg-afk-charcoal text-afk-offwhite font-bold shadow-sm"
+                    : "text-afk-muted hover:text-afk-offwhite"
+                }`}
+              >
+                <span>Active</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-afk-olive/20 text-afk-olive-light text-[10px]">
+                  {entries.filter((e) => e.status !== "REVERSED" && e.entryType !== "REVERSAL").length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("ALL")}
+                className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === "ALL"
+                    ? "bg-afk-charcoal text-afk-offwhite font-bold shadow-sm"
+                    : "text-afk-muted hover:text-afk-offwhite"
+                }`}
+              >
+                <span>Audit Trail</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-afk-border text-afk-muted text-[10px]">
+                  {entries.length}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
+
+        {viewMode === "ACTIVE" && entries.some((e) => e.status === "REVERSED" || e.entryType === "REVERSAL") && (
+          <div className="p-2.5 rounded bg-afk-surface/60 border border-afk-border text-[11px] text-afk-muted flex items-center justify-between">
+            <span>
+              💡 Cancelled and offset reversal transactions are hidden in Active View to keep your financial ledger clean.
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewMode("ALL")}
+              className="text-amber-400 hover:text-amber-300 font-medium cursor-pointer underline ml-2 shrink-0"
+            >
+              View Full Audit Trail
+            </button>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -641,118 +819,180 @@ export function FinanceWorkspaceClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-afk-border/40 font-mono">
-              {entries.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-afk-muted font-sans">
-                    No journal entries recorded yet. Record an expense or receive goods to start posting.
-                  </td>
-                </tr>
-              ) : (
-                entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-afk-surface/30 transition-colors">
-                    <td className="py-2.5 font-bold text-afk-offwhite">{entry.entryNumber}</td>
-                    <td className="py-2.5">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold bg-afk-surface border border-afk-border text-afk-muted">
-                        {entry.entryType}
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-afk-muted">
-                      {new Date(entry.date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="py-2.5 text-afk-offwhite font-sans max-w-xs truncate" title={entry.description}>
-                      {entry.description}
-                    </td>
-                    <td className="py-2.5 text-afk-muted">{entry.reference || "—"}</td>
-                    <td className="py-2.5 text-center">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
-                          entry.status === "POSTED"
-                            ? "text-afk-success bg-afk-olive-dark border border-afk-olive"
-                            : "text-afk-danger bg-afk-danger/20"
+              {(() => {
+                const displayedEntries =
+                  viewMode === "ACTIVE"
+                    ? entries.filter((e) => e.status !== "REVERSED" && e.entryType !== "REVERSAL")
+                    : entries;
+
+                if (displayedEntries.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-afk-muted font-sans">
+                        No transactions to display in this view.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return displayedEntries.map((entry) => {
+                  const isReversal = entry.entryType === "REVERSAL";
+                  const isReversed = entry.status === "REVERSED";
+
+                  return (
+                    <tr
+                      key={entry.id}
+                      className={`hover:bg-afk-surface/30 transition-colors ${
+                        isReversed ? "opacity-60 bg-red-500/[0.02]" : isReversal ? "bg-amber-500/[0.02]" : ""
+                      }`}
+                    >
+                      <td className="py-2.5 font-bold text-afk-offwhite flex items-center gap-1.5">
+                        <span>{entry.entryNumber}</span>
+                      </td>
+
+                      <td className="py-2.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${
+                            isReversal
+                              ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                              : "bg-afk-surface border-afk-border text-afk-muted"
+                          }`}
+                        >
+                          {entry.entryType}
+                        </span>
+                      </td>
+
+                      <td className="py-2.5 text-afk-muted">
+                        {new Date(entry.date).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </td>
+
+                      <td
+                        className={`py-2.5 font-sans max-w-xs truncate ${
+                          isReversed
+                            ? "line-through text-afk-muted"
+                            : isReversal
+                            ? "text-amber-300/90"
+                            : "text-afk-offwhite"
                         }`}
+                        title={entry.description}
                       >
-                        {entry.status}
-                      </span>
-                    </td>
+                        {entry.description}
+                      </td>
 
-                    {/* Supporting Proof indicator */}
-                    <td className="py-2.5 text-center font-sans">
-                      {entry.evidence && entry.evidence.length > 0 ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openViewerForEntry(entry.evidence)}
-                            className="px-2 py-0.5 rounded-full bg-afk-surface hover:bg-afk-border text-afk-olive hover:text-afk-olive-light text-[10px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
-                            title="Click to view attached evidence in lightbox"
-                          >
-                            <Paperclip className="w-3 h-3 text-afk-olive" />
-                            <span>{entry.evidence.length}</span>
-                          </button>
+                      <td className="py-2.5 text-afk-muted">{entry.reference || "—"}</td>
 
-                          {entry.evidence[0]?.thumbnailUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={entry.evidence[0].thumbnailUrl}
-                              alt="Proof thumb"
-                              onClick={() => openViewerForEntry(entry.evidence)}
-                              className="w-5 h-5 rounded object-cover border border-afk-border cursor-pointer hover:scale-110 transition"
-                            />
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-afk-muted text-[10px] italic">None</span>
-                      )}
-                    </td>
+                      <td className="py-2.5 text-center">
+                        {isReversal ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30">
+                            OFFSET
+                          </span>
+                        ) : isReversed ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold text-red-400 bg-red-500/15 border border-red-500/30">
+                            REVERSED
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold text-afk-success bg-afk-olive-dark border border-afk-olive">
+                            {entry.status}
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Actions: Add Proof, Voucher, Reverse */}
-                    <td className="py-2.5 text-right font-sans">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setAddProofEntry(entry)}
-                          className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
-                          title="Attach proof to this journal entry"
-                        >
-                          <Paperclip className="w-3 h-3 text-afk-olive" />
-                          <span>Add Proof</span>
-                        </button>
-
-                        <Link
-                          href={`/print/voucher/${entry.id}`}
-                          target="_blank"
-                          className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition"
-                          title="Print official voucher"
-                        >
-                          <FileText className="w-3 h-3 text-afk-olive-accent" />
-                          <span>Voucher</span>
-                        </Link>
-
-                        {canManage && (
-                          entry.status === "REVERSED" ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 font-medium">
-                              Reversed
-                            </span>
-                          ) : (
+                      {/* Supporting Proof indicator */}
+                      <td className="py-2.5 text-center font-sans">
+                        {entry.evidence && entry.evidence.length > 0 ? (
+                          <div className="flex items-center justify-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setReversingEntry(entry)}
-                              className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
-                              title="Reverse this journal entry"
+                              onClick={() => openViewerForEntry(entry.evidence)}
+                              className="px-2 py-0.5 rounded-full bg-afk-surface hover:bg-afk-border text-afk-olive hover:text-afk-olive-light text-[10px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
+                              title="Click to view attached evidence in lightbox"
                             >
-                              <RotateCcw className="w-3 h-3 text-amber-400" />
-                              <span>Reverse</span>
+                              <Paperclip className="w-3 h-3 text-afk-olive" />
+                              <span>{entry.evidence.length}</span>
                             </button>
-                          )
+
+                            {entry.evidence[0]?.thumbnailUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={entry.evidence[0].thumbnailUrl}
+                                alt="Proof thumb"
+                                onClick={() => openViewerForEntry(entry.evidence)}
+                                className="w-5 h-5 rounded object-cover border border-afk-border cursor-pointer hover:scale-110 transition"
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-afk-muted text-[10px] italic">None</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                      </td>
+
+                      {/* Actions: Add Proof, Voucher, Re-enter, Reverse */}
+                      <td className="py-2.5 text-right font-sans">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!isReversed && !isReversal && (
+                            <button
+                              type="button"
+                              onClick={() => setAddProofEntry(entry)}
+                              className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition cursor-pointer"
+                              title="Attach proof to this journal entry"
+                            >
+                              <Paperclip className="w-3 h-3 text-afk-olive" />
+                              <span>Add Proof</span>
+                            </button>
+                          )}
+
+                          <Link
+                            href={`/print/voucher/${entry.id}`}
+                            target="_blank"
+                            className="px-2 py-1 rounded bg-afk-surface hover:bg-afk-border text-afk-muted hover:text-afk-offwhite text-[11px] font-medium border border-afk-border flex items-center gap-1 transition"
+                            title="Print official voucher"
+                          >
+                            <FileText className="w-3 h-3 text-afk-olive-accent" />
+                            <span>Voucher</span>
+                          </Link>
+
+                          {canManage && (
+                            isReversal ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] text-amber-300/70 bg-amber-500/10 border border-amber-500/20 font-medium">
+                                Offset Entry
+                              </span>
+                            ) : isReversed ? (
+                              <div className="flex items-center gap-1">
+                                <span className="px-2 py-0.5 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 font-medium">
+                                  Reversed
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLoadForCorrection(entry)}
+                                  className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                                  title="Load this entry's details into the form to make corrections"
+                                >
+                                  <RotateCcw className="w-3 h-3 text-amber-400" />
+                                  <span>Re-enter / Correct</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setReversingEntry(entry)}
+                                className="px-2 py-1 rounded bg-afk-surface hover:bg-amber-500/15 text-afk-muted hover:text-amber-400 text-[11px] font-medium border border-afk-border hover:border-amber-500/40 flex items-center gap-1 transition cursor-pointer"
+                                title="Reverse or correct this journal entry"
+                              >
+                                <RotateCcw className="w-3 h-3 text-amber-400" />
+                                <span>Reverse</span>
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -798,17 +1038,30 @@ export function FinanceWorkspaceClient({
           transaction={reversingEntry}
           onSuccess={(reversal) => {
             setSuccessInfo({
-              message: `Journal entry ${reversingEntry.entryNumber} reversed successfully! Reversing entry posted: ${reversal.entryNumber}`,
+              message: `Journal entry ${reversingEntry.entryNumber} reversed successfully! Offset entry posted: ${reversal.entryNumber}`,
               entryNumber: reversal.entryNumber,
               journalId: reversal.id,
               attachedCount: 0,
             });
-            setEntries((prev) =>
-              prev.map((item) =>
+            setEntries((prev) => [
+              {
+                id: reversal.id,
+                entryNumber: reversal.entryNumber,
+                date: new Date(),
+                entryType: "REVERSAL",
+                description: reversal.description,
+                reference: reversingEntry.entryNumber,
+                status: "POSTED",
+                evidence: [],
+              },
+              ...prev.map((item) =>
                 item.id === reversingEntry.id ? { ...item, status: "REVERSED" } : item
-              )
-            );
+              ),
+            ]);
             router.refresh();
+          }}
+          onCorrect={(tx) => {
+            handleLoadForCorrection(tx);
           }}
         />
       )}

@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     const customCategoryName = (formData.get("customCategoryName") as string) || undefined;
     const fromPaymentAccountId = (formData.get("fromPaymentAccountId") as string) || undefined;
     const toPaymentAccountId = (formData.get("toPaymentAccountId") as string) || undefined;
+    const isSupplierPayable = formData.get("isSupplierPayable") === "true";
     const idempotencyKey = (formData.get("idempotencyKey") as string) || undefined;
 
     // Collect attached files
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       customCategoryName,
       fromPaymentAccountId,
       toPaymentAccountId,
+      isSupplierPayable,
       files: filePayloads,
       userId: user.id,
       idempotencyKey,

@@ -32,6 +32,7 @@ export interface TransactionWithEvidenceInput {
   // Expense fields
   expenseAccountId?: string;
   customCategoryName?: string;
+  isSupplierPayable?: boolean;
   // Transfer fields
   fromPaymentAccountId?: string;
   toPaymentAccountId?: string;
@@ -151,6 +152,7 @@ export async function postFinancialTransactionWithEvidence(input: TransactionWit
         customCategoryName: input.customCategoryName,
         paymentAccountId: input.paymentAccountId,
         partnerId: input.partnerId,
+        isSupplierPayable: input.isSupplierPayable,
         amount: input.amount,
         description: input.description,
         reference: refToUse,

@@ -428,12 +428,13 @@ export async function createCustomExpenseCategory(input: {
   return newAcc;
 }
 
-// Business Expense (from Payment Account or Due to Partner)
+// Business Expense (from Payment Account, Due to Partner, or Trade Payables)
 export async function recordBusinessExpense(data: {
   expenseAccountId?: string;
   customCategoryName?: string;
   paymentAccountId?: string;
   partnerId?: string; // If paid personally by partner
+  isSupplierPayable?: boolean; // If unpaid / due to supplier (Trade Payables 2010)
   amount: number;
   description: string;
   reference?: string;
@@ -469,13 +470,18 @@ export async function recordBusinessExpense(data: {
     if (!dueAcc) throw new Error(`Due to account not found for ${partner.name}`);
     creditAccountId = dueAcc.id;
     memo = `Paid personally by ${partner.name} (reimbursable)`;
+  } else if (data.isSupplierPayable) {
+    const [payableAcc] = await db.select().from(accounts).where(eq(accounts.code, "2010")).limit(1);
+    if (!payableAcc) throw new Error("Trade Payables account (2010) not found.");
+    creditAccountId = payableAcc.id;
+    memo = `Supplier invoice due (Trade Payables)`;
   } else if (data.paymentAccountId) {
     const [payAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.paymentAccountId)).limit(1);
     if (!payAcc) throw new Error("Payment account not found.");
     creditAccountId = payAcc.glAccountId;
     memo = `Paid from ${payAcc.name}`;
   } else {
-    throw new Error("Must specify payment account or partner who paid.");
+    throw new Error("Must specify payment account, partner who paid, or mark as supplier payable.");
   }
 
   return await postJournalEntry({
