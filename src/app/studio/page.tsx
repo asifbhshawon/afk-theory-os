@@ -221,7 +221,7 @@ export default async function StudioPage({
             <input type="hidden" name="entityType" value={currentEntity} />
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Target Entity
               </label>
               <input
@@ -233,7 +233,7 @@ export default async function StudioPage({
             </div>
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Field Key *
               </label>
               <input
@@ -241,13 +241,13 @@ export default async function StudioPage({
                 name="fieldKey"
                 required
                 placeholder="e.g. fabric_composition"
-                className="w-full px-3 py-2 bg-afk-charcoal border border-afk-border rounded text-white font-mono lowercase focus:border-afk-olive-accent focus:outline-none"
+                className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white font-mono lowercase text-xs focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
               />
               <span className="text-[10px] text-afk-muted">Unique alphanumeric key for queries.</span>
             </div>
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Field Label *
               </label>
               <input
@@ -255,18 +255,18 @@ export default async function StudioPage({
                 name="fieldLabel"
                 required
                 placeholder="e.g. Fabric Composition"
-                className="w-full px-3 py-2 bg-afk-charcoal border border-afk-border rounded text-white focus:border-afk-olive-accent focus:outline-none"
+                className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
               />
             </div>
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Data Type *
               </label>
               <select
                 name="dataType"
                 required
-                className="w-full px-3 py-2 bg-afk-charcoal border border-afk-border rounded text-white focus:border-afk-olive-accent focus:outline-none"
+                className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
               >
                 <option value="TEXT">Text String</option>
                 <option value="NUMBER">Number (Integer)</option>
@@ -280,26 +280,26 @@ export default async function StudioPage({
             </div>
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Default Value
               </label>
               <input
                 type="text"
                 name="defaultValue"
                 placeholder="Optional default..."
-                className="w-full px-3 py-2 bg-afk-charcoal border border-afk-border rounded text-white focus:border-afk-olive-accent focus:outline-none"
+                className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
               />
             </div>
 
             <div>
-              <label className="block text-afk-muted uppercase font-semibold mb-1">
+              <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                 Help / Tooltip Text
               </label>
               <input
                 type="text"
                 name="helpText"
                 placeholder="Guidance for operators..."
-                className="w-full px-3 py-2 bg-afk-charcoal border border-afk-border rounded text-white focus:border-afk-olive-accent focus:outline-none"
+                className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
               />
             </div>
 

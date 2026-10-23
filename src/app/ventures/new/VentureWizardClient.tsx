@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   Calculator,
+  Calendar,
 } from "lucide-react";
 import { ParticipationMode } from "@/server/services/ventures";
 
@@ -77,7 +78,7 @@ export function VentureWizardClient({
   const [tags, setTags] = useState<string[]>(["2026-DROP"]);
 
   // Agreement State
-  const [participationMode, setParticipationMode] = useState<ParticipationMode>("PROPORTIONAL_CAPITAL");
+  const [participationMode, setParticipationMode] = useState<ParticipationMode>("PROPORTIONAL");
   const [hurdleRatePct, setHurdleRatePct] = useState<number>(0);
   const [preferredReturnPct, setPreferredReturnPct] = useState<number>(0);
   const [retainedEarningsPct, setRetainedEarningsPct] = useState<number>(0);
@@ -87,6 +88,7 @@ export function VentureWizardClient({
   const [participants, setParticipants] = useState<WizardParticipant[]>(() =>
     partners.map((p) => ({
       partnerId: p.id,
+      name: p.name,
       isExternal: false,
       roleDescription: "Founding Partner",
       committedCapital: 20000,
@@ -103,19 +105,19 @@ export function VentureWizardClient({
     badge: string;
   }[] = [
     {
-      code: "PROPORTIONAL_CAPITAL",
+      code: "PROPORTIONAL",
       title: "Proportional to Capital",
       description: "Profit share directly mirrors cash and capital committed by each participant.",
       badge: "Standard",
     },
     {
-      code: "CUSTOM_PROFIT_SPLIT",
+      code: "CUSTOM_PROFIT",
       title: "Asymmetric Custom Split",
       description: "Independent profit and loss percentages different from invested capital (e.g. 50/30/20 funding vs 40/40/20 profit).",
       badge: "Most Flexible",
     },
     {
-      code: "EQUAL_SPLIT",
+      code: "EQUAL",
       title: "Equal Split",
       description: "Profit is divided equally among participating members regardless of initial capital variance.",
       badge: "Equal",
@@ -127,25 +129,25 @@ export function VentureWizardClient({
       badge: "De-Risked",
     },
     {
-      code: "FIXED_RETURN_PLUS_RESIDUAL",
+      code: "FIXED_RETURN",
       title: "Fixed Return + Residual",
       description: "Senior capital receives guaranteed hurdle % return, junior capital receives remaining upside.",
       badge: "Hurdle",
     },
     {
-      code: "REINVESTMENT",
+      code: "PROFIT_REINVESTMENT",
       title: "Reinvestment Pool",
       description: "A fixed percentage of proceeds is retained to fund the subsequent apparel batch or drop.",
       badge: "Compounding",
     },
     {
-      code: "SERVICE_SWEAT_EQUITY",
+      code: "MANAGEMENT_SERVICE",
       title: "Service / Sweat Equity",
       description: "Recognises design, marketing, or photography contributions with agreed valuation without diluting statutory company shares.",
       badge: "Sweat Equity",
     },
     {
-      code: "MULTI_STAGE_WATERFALL",
+      code: "CUSTOM_WATERFALL",
       title: "Multi-Stage Waterfall",
       description: "Complex multi-tier distribution: Reserve -> Capital Return -> Hurdle -> Residual split.",
       badge: "Advanced",
@@ -201,6 +203,7 @@ export function VentureWizardClient({
       {
         partnerId: null,
         isExternal: true,
+        name: `Investor ${prev.length + 1}`,
         externalName: `Investor ${prev.length + 1}`,
         externalRole: "External Angel / Collaborator",
         roleDescription: "External Capital",
@@ -258,28 +261,39 @@ export function VentureWizardClient({
   };
 
   const STEPS_NAV = [
-    "1. Identity",
-    "2. Model",
-    "3. Budget",
-    "4. Participants",
-    "5. Equity Split",
-    "6. Waterfall",
-    "7. Funding",
-    "8. Product Link",
-    "9. Governance",
-    "10. Launch",
+    { num: 1, label: "Identity" },
+    { num: 2, label: "Model" },
+    { num: 3, label: "Budget" },
+    { num: 4, label: "Members" },
+    { num: 5, label: "Split %" },
+    { num: 6, label: "Waterfall" },
+    { num: 7, label: "Funding" },
+    { num: 8, label: "Products" },
+    { num: 9, label: "Rules" },
+    { num: 10, label: "Review" },
   ];
 
+  // Common high-contrast input classes
+  const inputClass =
+    "w-full px-4 py-3 bg-[#101216] border border-[#2D333F] rounded-xl text-white placeholder:text-gray-500 text-sm focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner";
+  const labelClass =
+    "block text-xs font-bold text-gray-200 uppercase tracking-wider mb-2";
+
   return (
-    <div className="bg-afk-surface border border-afk-border rounded-2xl shadow-xl overflow-hidden">
+    <div className="bg-[#14171C] border border-[#282E38] rounded-2xl shadow-2xl overflow-hidden">
       {/* Wizard Header */}
-      <div className="p-6 bg-afk-charcoal border-b border-afk-border">
+      <div className="p-6 bg-[#1A1E24] border-b border-[#282E38]">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-mono font-semibold text-afk-olive-accent tracking-wider uppercase">
-              Step {step} of 10 — Create Venture
-            </span>
-            <h2 className="text-xl font-bold text-white mt-0.5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded bg-afk-olive/30 text-afk-olive-accent border border-afk-olive">
+                STEP {step} OF 10
+              </span>
+              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">
+                Venture & Waterfall Wizard
+              </span>
+            </div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">
               {step === 1 && "Venture Identity & Classification"}
               {step === 2 && "Select Participation Model"}
               {step === 3 && "Capital Budget & Target Fund"}
@@ -294,78 +308,88 @@ export function VentureWizardClient({
           </div>
           <Link
             href="/ventures"
-            className="text-xs font-semibold text-afk-muted hover:text-white transition-colors"
+            className="px-3.5 py-1.5 text-xs font-semibold text-gray-400 hover:text-white bg-[#101216] border border-[#2D333F] rounded-lg transition-colors"
           >
             Cancel
           </Link>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full bg-afk-border h-1.5 rounded-full mt-4 overflow-hidden">
+        <div className="w-full bg-[#101216] h-2 rounded-full mt-5 overflow-hidden border border-[#282E38]">
           <div
-            className="bg-afk-olive-accent h-full transition-all duration-300"
+            className="bg-gradient-to-r from-afk-olive to-afk-olive-accent h-full transition-all duration-300 shadow-sm"
             style={{ width: `${(step / 10) * 100}%` }}
           />
         </div>
 
-        {/* Step Tabs */}
-        <div className="flex gap-2 overflow-x-auto mt-3 py-1 scrollbar-none">
-          {STEPS_NAV.map((label, idx) => (
-            <button
-              key={label}
-              onClick={() => setStep(idx + 1)}
-              className={`text-[11px] font-medium px-2 py-1 rounded whitespace-nowrap transition-colors ${
-                step === idx + 1
-                  ? "bg-afk-olive/30 text-afk-olive-accent border border-afk-olive"
-                  : idx + 1 < step
-                  ? "text-white hover:text-afk-olive-accent"
-                  : "text-afk-muted"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Step Indicator Tabs */}
+        <div className="flex gap-2 overflow-x-auto mt-4 py-1 scrollbar-none">
+          {STEPS_NAV.map((s) => {
+            const isCurrent = step === s.num;
+            const isPast = step > s.num;
+
+            return (
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => setStep(s.num)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  isCurrent
+                    ? "bg-afk-olive-accent text-white font-bold shadow-md ring-1 ring-white/20"
+                    : isPast
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                    : "bg-[#101216] text-gray-400 border border-[#282E38] hover:text-white hover:border-gray-600"
+                }`}
+              >
+                {isPast ? <CheckCircle2 className="w-3.5 h-3.5" /> : <span>{s.num}.</span>}
+                <span>{s.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Error Alert */}
       {error && (
-        <div className="mx-6 mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3 text-sm text-red-400">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="mx-6 mt-6 p-4 bg-red-500/15 border border-red-500/40 rounded-xl flex items-center gap-3 text-sm text-red-300 font-medium shadow-md">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Wizard Body */}
-      <div className="p-6">
+      <div className="p-6 sm:p-8">
         {/* STEP 1: Identity */}
         {step === 1 && (
-          <div className="space-y-4 max-w-2xl">
+          <div className="space-y-6 max-w-2xl">
             <div>
-              <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                Venture Name *
+              <label className={labelClass}>
+                Venture Name <span className="text-amber-400 font-bold">*</span>
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Heavyweight Graphic Tee Collection #01"
-                className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                className={inputClass}
               />
+              <span className="text-xs text-gray-400 mt-1.5 block">
+                Official commercial name for this product release or project.
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Venture Type *
+                <label className={labelClass}>
+                  Venture Type <span className="text-amber-400 font-bold">*</span>
                 </label>
                 <select
                   value={typeCode}
                   onChange={(e) => setTypeCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                  className={inputClass}
                 >
                   {ventureTypes.map((vt) => (
-                    <option key={vt.code} value={vt.code}>
+                    <option key={vt.code} value={vt.code} className="bg-[#101216] text-white">
                       {vt.name} ({vt.code})
                     </option>
                   ))}
@@ -373,16 +397,14 @@ export function VentureWizardClient({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Manager Partner
-                </label>
+                <label className={labelClass}>Managing Partner</label>
                 <select
                   value={managerPartnerId}
                   onChange={(e) => setManagerPartnerId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                  className={inputClass}
                 >
                   {partners.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option key={p.id} value={p.id} className="bg-[#101216] text-white">
                       {p.name}
                     </option>
                   ))}
@@ -391,40 +413,34 @@ export function VentureWizardClient({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                Description & Business Objectives
-              </label>
+              <label className={labelClass}>Description & Business Objectives</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="Describe fabric specs, target audience, supplier terms, and operational plan..."
-                className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                rows={4}
+                placeholder="Describe fabric specs, target audience, production batch size, and operational roadmap..."
+                className={inputClass}
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Target Launch Date
-                </label>
+                <label className={labelClass}>Target Launch Date</label>
                 <input
                   type="date"
                   value={targetLaunchDate}
                   onChange={(e) => setTargetLaunchDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Target Settlement Date
-                </label>
+                <label className={labelClass}>Target Settlement Date</label>
                 <input
                   type="date"
                   value={targetEndDate}
                   onChange={(e) => setTargetEndDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none"
+                  className={inputClass}
                 />
               </div>
             </div>
@@ -433,30 +449,36 @@ export function VentureWizardClient({
 
         {/* STEP 2: Participation Model */}
         {step === 2 && (
-          <div className="space-y-4">
-            <p className="text-sm text-afk-muted">
-              Select how profit and loss will be distributed among participants. You can customize percentages in Step 5.
+          <div className="space-y-5">
+            <p className="text-sm text-gray-300 font-medium">
+              Choose the distribution architecture for this venture. You will specify exact participant percentages in Step 5.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {MODES.map((m) => {
                 const isSelected = participationMode === m.code;
                 return (
                   <div
                     key={m.code}
                     onClick={() => setParticipationMode(m.code)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                    className={`p-5 rounded-xl border cursor-pointer transition-all ${
                       isSelected
-                        ? "bg-afk-olive/15 border-afk-olive ring-1 ring-afk-olive"
-                        : "bg-afk-surface-light/40 border-afk-border hover:border-afk-border/80"
+                        ? "bg-[#1E251E] border-afk-olive-accent ring-2 ring-afk-olive-accent shadow-lg"
+                        : "bg-[#101216] border-[#2D333F] hover:border-gray-500 hover:bg-[#15181E]"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-bold text-white">{m.title}</span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-afk-border text-afk-muted">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                          isSelected
+                            ? "bg-afk-olive-accent text-white"
+                            : "bg-[#1C2026] text-gray-400 border border-[#2D333F]"
+                        }`}
+                      >
                         {m.badge}
                       </span>
                     </div>
-                    <p className="text-xs text-afk-muted">{m.description}</p>
+                    <p className="text-xs text-gray-400 leading-relaxed">{m.description}</p>
                   </div>
                 );
               })}
@@ -466,33 +488,33 @@ export function VentureWizardClient({
 
         {/* STEP 3: Budget & Target Fund */}
         {step === 3 && (
-          <div className="space-y-4 max-w-xl">
+          <div className="space-y-6 max-w-xl">
             <div>
-              <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                Total Budget Cap / Target Funding (৳ BDT) *
+              <label className={labelClass}>
+                Total Budget Cap / Target Funding (৳ BDT) <span className="text-amber-400 font-bold">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-2.5 text-afk-muted font-bold text-sm">৳</span>
+                <span className="absolute left-4 top-3.5 text-afk-olive-accent font-bold text-base">৳</span>
                 <input
                   type="number"
                   min="0"
                   step="500"
                   value={budgetCap}
                   onChange={(e) => setBudgetCap(parseFloat(e.target.value) || 0)}
-                  className="w-full pl-8 pr-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white font-mono text-sm focus:border-afk-olive-accent focus:outline-none"
+                  className="w-full pl-9 pr-4 py-3 bg-[#101216] border border-[#2D333F] rounded-xl text-white font-mono text-base font-bold focus:border-afk-olive-accent focus:ring-1 focus:ring-afk-olive-accent focus:outline-none transition-all shadow-inner"
                 />
               </div>
-              <p className="text-xs text-afk-muted mt-1.5">
-                The total capital required to fund fabric procurement, manufacturing, labels, packaging, and marketing for this drop.
+              <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                Total financing required to procure fabric, run manufacturing, packaging, and marketing for this drop.
               </p>
             </div>
 
-            <div className="p-4 bg-afk-charcoal border border-afk-border rounded-xl">
-              <span className="text-xs font-semibold text-afk-olive-accent uppercase tracking-wider block mb-1">
-                Funding Structure
+            <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl space-y-2">
+              <span className="text-xs font-bold text-afk-olive-accent uppercase tracking-wider block">
+                Two-Tier Financial Isolation Guarantee
               </span>
-              <p className="text-xs text-afk-muted">
-                Each participant will commit a portion of this budget. If actual expenses are lower than budget, unused funds are preserved or returned in settlement.
+              <p className="text-xs text-gray-300 leading-relaxed">
+                This budget forms an independent sub-ledger pool. If actual production costs are lower than target budget, unused capital is preserved for partners or returned during settlement.
               </p>
             </div>
           </div>
@@ -500,22 +522,22 @@ export function VentureWizardClient({
 
         {/* STEP 4: Select Participating Members */}
         {step === 4 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-afk-muted">
-                Select who is participating financially in this venture. Founding partners with 0% contribution can be excluded without affecting company equity.
+          <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-sm text-gray-300 font-medium">
+                Choose who participates in this venture. Partners with 0% participation can be omitted without altering their legal 20% company equity.
               </p>
               <button
                 type="button"
                 onClick={addExternalParticipant}
-                className="px-3 py-1.5 text-xs font-semibold text-afk-olive-accent bg-afk-olive/20 hover:bg-afk-olive/30 border border-afk-olive rounded-lg transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 text-xs font-bold text-afk-olive-accent bg-afk-olive/20 hover:bg-afk-olive/30 border border-afk-olive rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap self-start"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 Add External Investor
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {participants.map((p, idx) => {
                 const partnerObj = partners.find((pt) => pt.id === p.partnerId);
                 const displayName = partnerObj?.name || p.externalName || `Participant ${idx + 1}`;
@@ -523,15 +545,15 @@ export function VentureWizardClient({
                 return (
                   <div
                     key={idx}
-                    className="p-3 bg-afk-surface-light/60 border border-afk-border rounded-xl flex items-center justify-between gap-4"
+                    className="p-4 bg-[#101216] border border-[#282E38] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-gray-600 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-afk-olive/20 border border-afk-olive flex items-center justify-center font-bold text-xs text-afk-olive-accent">
+                      <div className="w-9 h-9 rounded-full bg-afk-olive/25 border border-afk-olive flex items-center justify-center font-bold text-sm text-afk-olive-accent shadow-sm">
                         {displayName.charAt(0)}
                       </div>
                       <div>
                         <span className="text-sm font-bold text-white block">{displayName}</span>
-                        <span className="text-[11px] text-afk-muted">
+                        <span className="text-xs text-gray-400">
                           {p.isExternal ? "External Investor / Creator" : "Founding Partner (20% Company Equity)"}
                         </span>
                       </div>
@@ -548,14 +570,15 @@ export function VentureWizardClient({
                           );
                         }}
                         placeholder="Role / Responsibility"
-                        className="px-2.5 py-1 text-xs bg-afk-charcoal border border-afk-border rounded text-white"
+                        className="px-3 py-1.5 text-xs bg-[#171A20] border border-[#2D333F] rounded-lg text-white placeholder:text-gray-500 focus:border-afk-olive-accent focus:outline-none"
                       />
 
                       {participants.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeParticipant(idx)}
-                          className="p-1.5 text-afk-muted hover:text-red-400 transition-colors"
+                          className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+                          title="Remove participant"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -570,14 +593,14 @@ export function VentureWizardClient({
 
         {/* STEP 5: Equity Split & Percentages */}
         {step === 5 && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <span className="text-xs font-semibold text-afk-muted uppercase">
-                  Participants & Allocations
+                <span className="text-xs font-bold text-afk-olive-accent uppercase tracking-wider block">
+                  Capital Commitment & Allocation Table
                 </span>
-                <p className="text-xs text-afk-muted">
-                  Specify committed cash capital and agreed profit/loss distribution.
+                <p className="text-xs text-gray-300">
+                  Input committed capital and agreed profit/loss distribution.
                 </p>
               </div>
 
@@ -585,14 +608,14 @@ export function VentureWizardClient({
                 <button
                   type="button"
                   onClick={handleEqualize}
-                  className="px-2.5 py-1 text-xs font-medium text-afk-muted hover:text-white bg-afk-surface-light border border-afk-border rounded transition-colors"
+                  className="px-3 py-1.5 text-xs font-bold text-gray-300 hover:text-white bg-[#101216] border border-[#2D333F] hover:border-gray-500 rounded-lg transition-colors"
                 >
                   Equalize (1/N)
                 </button>
                 <button
                   type="button"
                   onClick={handleProportionalize}
-                  className="px-2.5 py-1 text-xs font-medium text-afk-olive-accent hover:text-white bg-afk-olive/20 border border-afk-olive rounded transition-colors"
+                  className="px-3 py-1.5 text-xs font-bold text-afk-olive-accent hover:text-white bg-afk-olive/25 border border-afk-olive hover:bg-afk-olive/40 rounded-lg transition-colors"
                 >
                   Proportional to Capital
                 </button>
@@ -600,26 +623,26 @@ export function VentureWizardClient({
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto border border-afk-border rounded-xl">
+            <div className="overflow-x-auto border border-[#282E38] rounded-xl shadow-lg">
               <table className="w-full text-left text-xs">
-                <thead className="bg-afk-charcoal text-afk-muted uppercase font-mono text-[10px] border-b border-afk-border">
+                <thead className="bg-[#101216] text-gray-300 uppercase font-mono text-[11px] border-b border-[#282E38]">
                   <tr>
-                    <th className="py-2.5 px-3">Participant</th>
-                    <th className="py-2.5 px-3">Committed Capital (৳)</th>
-                    <th className="py-2.5 px-3">Profit Share (%)</th>
-                    <th className="py-2.5 px-3">Loss Share (%)</th>
-                    <th className="py-2.5 px-3">Recovery Priority</th>
+                    <th className="py-3 px-4">Participant</th>
+                    <th className="py-3 px-4">Committed (৳)</th>
+                    <th className="py-3 px-4">Profit Share (%)</th>
+                    <th className="py-3 px-4">Loss Share (%)</th>
+                    <th className="py-3 px-4">Priority Tier</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-afk-border/50">
+                <tbody className="divide-y divide-[#282E38]/60 bg-[#14171C]">
                   {participants.map((p, idx) => {
                     const partnerObj = partners.find((pt) => pt.id === p.partnerId);
                     const name = partnerObj?.name || p.externalName || `Participant ${idx + 1}`;
 
                     return (
-                      <tr key={idx} className="hover:bg-afk-surface-light/40">
-                        <td className="py-2 px-3 font-medium text-white">{name}</td>
-                        <td className="py-2 px-3">
+                      <tr key={idx} className="hover:bg-[#1A1E24]">
+                        <td className="py-3 px-4 font-bold text-white text-sm">{name}</td>
+                        <td className="py-3 px-4">
                           <input
                             type="number"
                             min="0"
@@ -631,11 +654,11 @@ export function VentureWizardClient({
                                 prev.map((item, i) => (i === idx ? { ...item, committedCapital: val } : item))
                               );
                             }}
-                            className="w-28 px-2 py-1 bg-afk-charcoal border border-afk-border rounded text-white font-mono"
+                            className="w-32 px-3 py-1.5 bg-[#0D0F12] border border-[#2D333F] rounded-lg text-white font-mono text-xs focus:border-afk-olive-accent focus:outline-none"
                           />
                         </td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-1">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
                             <input
                               type="number"
                               min="0"
@@ -648,13 +671,13 @@ export function VentureWizardClient({
                                   prev.map((item, i) => (i === idx ? { ...item, profitSharePct: val } : item))
                                 );
                               }}
-                              className="w-20 px-2 py-1 bg-afk-charcoal border border-afk-border rounded text-white font-mono"
+                              className="w-24 px-3 py-1.5 bg-[#0D0F12] border border-[#2D333F] rounded-lg text-emerald-400 font-bold font-mono text-xs focus:border-afk-olive-accent focus:outline-none"
                             />
-                            <span className="text-afk-muted">%</span>
+                            <span className="text-gray-400 font-bold">%</span>
                           </div>
                         </td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-1">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
                             <input
                               type="number"
                               min="0"
@@ -667,12 +690,12 @@ export function VentureWizardClient({
                                   prev.map((item, i) => (i === idx ? { ...item, lossSharePct: val } : item))
                                 );
                               }}
-                              className="w-20 px-2 py-1 bg-afk-charcoal border border-afk-border rounded text-white font-mono"
+                              className="w-24 px-3 py-1.5 bg-[#0D0F12] border border-[#2D333F] rounded-lg text-amber-400 font-bold font-mono text-xs focus:border-afk-olive-accent focus:outline-none"
                             />
-                            <span className="text-afk-muted">%</span>
+                            <span className="text-gray-400 font-bold">%</span>
                           </div>
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-3 px-4">
                           <select
                             value={p.capitalRecoveryPriority || 1}
                             onChange={(e) => {
@@ -681,11 +704,11 @@ export function VentureWizardClient({
                                 prev.map((item, i) => (i === idx ? { ...item, capitalRecoveryPriority: val } : item))
                               );
                             }}
-                            className="px-2 py-1 bg-afk-charcoal border border-afk-border rounded text-white"
+                            className="px-2.5 py-1.5 bg-[#0D0F12] border border-[#2D333F] rounded-lg text-gray-200 text-xs focus:border-afk-olive-accent focus:outline-none"
                           >
-                            <option value={1}>Tier 1 (Senior)</option>
+                            <option value={1}>Tier 1 (Senior Return)</option>
                             <option value={2}>Tier 2 (Pari-Passu)</option>
-                            <option value={3}>Tier 3 (Junior)</option>
+                            <option value={3}>Tier 3 (Subordinated)</option>
                           </select>
                         </td>
                       </tr>
@@ -695,31 +718,31 @@ export function VentureWizardClient({
               </table>
             </div>
 
-            {/* Invariant Status Bars */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            {/* Invariant Status Indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div
-                className={`p-3 rounded-xl border flex items-center justify-between ${
+                className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
                   isProfitValid
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                    : "bg-red-500/15 border-red-500/40 text-red-300"
                 }`}
               >
-                <span className="text-xs font-semibold">Total Profit Share Sum:</span>
+                <span className="text-xs font-bold uppercase tracking-wider">Total Profit Share:</span>
                 <span className="text-sm font-mono font-bold">
-                  {totalProfitPct.toFixed(2)}% {isProfitValid ? "✓ Valid (100.00%)" : "✗ Must equal 100%"}
+                  {totalProfitPct.toFixed(2)}% {isProfitValid ? "✓ Exact (100.00%)" : "✗ Must equal 100%"}
                 </span>
               </div>
 
               <div
-                className={`p-3 rounded-xl border flex items-center justify-between ${
+                className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
                   isLossValid
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                    : "bg-red-500/15 border-red-500/40 text-red-300"
                 }`}
               >
-                <span className="text-xs font-semibold">Total Loss Share Sum:</span>
+                <span className="text-xs font-bold uppercase tracking-wider">Total Loss Share:</span>
                 <span className="text-sm font-mono font-bold">
-                  {totalLossPct.toFixed(2)}% {isLossValid ? "✓ Valid (100.00%)" : "✗ Must equal 100%"}
+                  {totalLossPct.toFixed(2)}% {isLossValid ? "✓ Exact (100.00%)" : "✗ Must equal 100%"}
                 </span>
               </div>
             </div>
@@ -728,13 +751,11 @@ export function VentureWizardClient({
 
         {/* STEP 6: Waterfall Structure */}
         {step === 6 && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-6 max-w-2xl">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Retained Reserve (%)
-                </label>
-                <div className="flex items-center gap-1">
+                <label className={labelClass}>Retained Reserve (%)</label>
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="0"
@@ -742,20 +763,18 @@ export function VentureWizardClient({
                     step="0.5"
                     value={retainedEarningsPct}
                     onChange={(e) => setRetainedEarningsPct(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-afk-surface-light border border-afk-border rounded-lg text-white font-mono text-sm"
+                    className={inputClass}
                   />
-                  <span className="text-afk-muted">%</span>
+                  <span className="text-gray-400 font-bold">%</span>
                 </div>
-                <span className="text-[11px] text-afk-muted mt-1 block">
-                  Holdback for returns/defects before payout.
+                <span className="text-xs text-gray-400 mt-1.5 block">
+                  Holdback for returns/defects before cash payout.
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Preferred Return / Hurdle (%)
-                </label>
-                <div className="flex items-center gap-1">
+                <label className={labelClass}>Preferred Hurdle (%)</label>
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="0"
@@ -763,20 +782,18 @@ export function VentureWizardClient({
                     step="0.5"
                     value={preferredReturnPct}
                     onChange={(e) => setPreferredReturnPct(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-afk-surface-light border border-afk-border rounded-lg text-white font-mono text-sm"
+                    className={inputClass}
                   />
-                  <span className="text-afk-muted">%</span>
+                  <span className="text-gray-400 font-bold">%</span>
                 </div>
-                <span className="text-[11px] text-afk-muted mt-1 block">
-                  Priority hurdle paid before residual split.
+                <span className="text-xs text-gray-400 mt-1.5 block">
+                  Priority return paid before residual pool.
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                  Reinvestment Roll (%)
-                </label>
-                <div className="flex items-center gap-1">
+                <label className={labelClass}>Reinvestment Roll (%)</label>
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="0"
@@ -784,22 +801,22 @@ export function VentureWizardClient({
                     step="0.5"
                     value={reinvestmentPct}
                     onChange={(e) => setReinvestmentPct(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-afk-surface-light border border-afk-border rounded-lg text-white font-mono text-sm"
+                    className={inputClass}
                   />
-                  <span className="text-afk-muted">%</span>
+                  <span className="text-gray-400 font-bold">%</span>
                 </div>
-                <span className="text-[11px] text-afk-muted mt-1 block">
-                  Auto-rolled into next collection fund.
+                <span className="text-xs text-gray-400 mt-1.5 block">
+                  Auto-rolled into subsequent batch fund.
                 </span>
               </div>
             </div>
 
-            <div className="p-4 bg-afk-charcoal border border-afk-border rounded-xl">
-              <span className="text-xs font-bold text-white uppercase block mb-1">
+            <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl space-y-2">
+              <span className="text-xs font-bold text-afk-olive-accent uppercase tracking-wider block">
                 Deterministic Integer-Paisa Guarantee
               </span>
-              <p className="text-xs text-afk-muted">
-                Our calculation engine uses integer-paisa rounding remainder allocation to guarantee that no fraction of a paisa is lost, ensuring exact balanced double-entry accounting.
+              <p className="text-xs text-gray-300 leading-relaxed">
+                The settlement engine operates in deterministic integer-paisa arithmetic, allocating the rounding remainder to the final eligible participant to guarantee zero financial leakage.
               </p>
             </div>
           </div>
@@ -807,37 +824,37 @@ export function VentureWizardClient({
 
         {/* STEP 7: Funding Methods */}
         {step === 7 && (
-          <div className="space-y-4 max-w-2xl">
-            <p className="text-sm text-afk-muted">
+          <div className="space-y-5 max-w-2xl">
+            <p className="text-sm text-gray-300 font-medium">
               AFK THEORY supports multiple contribution modes. Select how capital will be delivered:
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-4 bg-afk-surface-light/40 border border-afk-border rounded-xl">
-                <span className="text-xs font-bold text-white block mb-1">1. Cash & Bank Deposit</span>
-                <p className="text-xs text-afk-muted">
-                  Direct transfer to BRAC Bank, bKash Merchant, or Cash on Hand tagged to this venture.
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl">
+                <span className="text-xs font-bold text-white block mb-1.5">1. Cash & Bank Deposit</span>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Direct deposit into BRAC Bank, bKash Merchant, or Cash on Hand tagged to this venture.
                 </p>
               </div>
 
-              <div className="p-4 bg-afk-surface-light/40 border border-afk-border rounded-xl">
-                <span className="text-xs font-bold text-white block mb-1">2. Partner Loan</span>
-                <p className="text-xs text-afk-muted">
-                  Recorded in Partner Due Liability (2110-2150) without altering company share capital.
+              <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl">
+                <span className="text-xs font-bold text-white block mb-1.5">2. Partner Loan</span>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Credited to Partner Due Liability (2110-2150) without altering company share capital.
                 </p>
               </div>
 
-              <div className="p-4 bg-afk-surface-light/40 border border-afk-border rounded-xl">
-                <span className="text-xs font-bold text-white block mb-1">3. Non-Cash Asset (Fabric)</span>
-                <p className="text-xs text-afk-muted">
-                  Agreed valuation of raw fabric or trims contributed directly into Materials Inventory (1210).
+              <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl">
+                <span className="text-xs font-bold text-white block mb-1.5">3. Non-Cash Fabric Asset</span>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Agreed valuation of raw fabric or trims debited directly into Materials Inventory (1210).
                 </p>
               </div>
 
-              <div className="p-4 bg-afk-surface-light/40 border border-afk-border rounded-xl">
-                <span className="text-xs font-bold text-white block mb-1">4. Sweat / Service Equity</span>
-                <p className="text-xs text-afk-muted">
-                  Valued design, shooting, or management service recognized in drop agreement without statutory dilution.
+              <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl">
+                <span className="text-xs font-bold text-white block mb-1.5">4. Sweat / Service Equity</span>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Valued design, shooting, or management service recognized in drop agreement without dilution.
                 </p>
               </div>
             </div>
@@ -846,19 +863,17 @@ export function VentureWizardClient({
 
         {/* STEP 8: Product Link */}
         {step === 8 && (
-          <div className="space-y-4 max-w-xl">
-            <p className="text-sm text-afk-muted">
+          <div className="space-y-5 max-w-xl">
+            <p className="text-sm text-gray-300 font-medium">
               Optionally associate an existing apparel collection with this venture. You can also link products and inventory lots later.
             </p>
 
             <div>
-              <label className="block text-xs font-semibold text-afk-muted uppercase mb-1">
-                Link Collection (Optional)
-              </label>
-              <select className="w-full px-3.5 py-2.5 bg-afk-surface-light border border-afk-border rounded-lg text-white text-sm focus:border-afk-olive-accent focus:outline-none">
-                <option value="">None (Link later or independent venture)</option>
+              <label className={labelClass}>Link Apparel Collection (Optional)</label>
+              <select className={inputClass}>
+                <option value="" className="bg-[#101216] text-white">None (Link later or independent drop)</option>
                 {collections.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} className="bg-[#101216] text-white">
                     {c.name} ({c.code})
                   </option>
                 ))}
@@ -869,12 +884,12 @@ export function VentureWizardClient({
 
         {/* STEP 9: Governance & Approvals */}
         {step === 9 && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="p-4 bg-afk-surface-light/60 border border-afk-border rounded-xl space-y-3">
-              <span className="text-xs font-bold text-white uppercase tracking-wider block">
+          <div className="space-y-5 max-w-2xl">
+            <div className="p-5 bg-[#101216] border border-[#282E38] rounded-xl space-y-3.5 shadow-md">
+              <span className="text-xs font-bold text-afk-olive-accent uppercase tracking-wider block">
                 Two-Tier Ledger Governance
               </span>
-              <ul className="text-xs text-afk-muted space-y-2 list-disc list-inside">
+              <ul className="text-xs text-gray-300 space-y-2.5 list-disc list-inside leading-relaxed">
                 <li>
                   <strong className="text-white">Tier 1 Statutory Ledger:</strong> The founding 20% legal company ownership ledger remains untouched.
                 </li>
@@ -891,57 +906,57 @@ export function VentureWizardClient({
 
         {/* STEP 10: Review & Launch */}
         {step === 10 && (
-          <div className="space-y-5 max-w-3xl">
-            <div className="p-5 bg-afk-charcoal border border-afk-border rounded-xl">
-              <div className="flex items-center justify-between pb-3 border-b border-afk-border">
+          <div className="space-y-6 max-w-3xl">
+            <div className="p-6 bg-[#101216] border border-[#282E38] rounded-2xl shadow-xl">
+              <div className="flex items-center justify-between pb-4 border-b border-[#282E38]">
                 <div>
-                  <span className="text-xs font-mono font-semibold text-afk-olive-accent">
+                  <span className="text-xs font-mono font-bold text-afk-olive-accent px-2 py-0.5 rounded bg-afk-olive/20 border border-afk-olive">
                     {typeCode}
                   </span>
-                  <h3 className="text-lg font-bold text-white">{name}</h3>
+                  <h3 className="text-xl font-bold text-white mt-2">{name}</h3>
                 </div>
-                <span className="px-3 py-1 text-xs font-bold rounded-full bg-afk-olive/20 text-afk-olive-accent border border-afk-olive">
+                <span className="px-3.5 py-1 text-xs font-bold rounded-full bg-afk-olive/20 text-afk-olive-accent border border-afk-olive">
                   {participationMode.replace(/_/g, " ")}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-b border-afk-border text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-5 border-b border-[#282E38] text-xs">
                 <div>
-                  <span className="text-afk-muted block text-[10px] uppercase">Budget Cap</span>
-                  <span className="font-bold text-white">৳{budgetCap.toLocaleString()}</span>
+                  <span className="text-gray-400 block text-[10px] uppercase font-semibold">Budget Cap</span>
+                  <span className="font-bold text-white text-sm">৳{budgetCap.toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-afk-muted block text-[10px] uppercase">Committed</span>
-                  <span className="font-bold text-white">৳{totalCommitted.toLocaleString()}</span>
+                  <span className="text-gray-400 block text-[10px] uppercase font-semibold">Committed</span>
+                  <span className="font-bold text-white text-sm">৳{totalCommitted.toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-afk-muted block text-[10px] uppercase">Participants</span>
-                  <span className="font-bold text-white">{participants.length} Members</span>
+                  <span className="text-gray-400 block text-[10px] uppercase font-semibold">Participants</span>
+                  <span className="font-bold text-white text-sm">{participants.length} Members</span>
                 </div>
                 <div>
-                  <span className="text-afk-muted block text-[10px] uppercase">Reserve %</span>
-                  <span className="font-bold text-white">{retainedEarningsPct}%</span>
+                  <span className="text-gray-400 block text-[10px] uppercase font-semibold">Reserve %</span>
+                  <span className="font-bold text-white text-sm">{retainedEarningsPct}%</span>
                 </div>
               </div>
 
-              <div className="mt-4">
-                <span className="text-xs font-semibold text-afk-muted uppercase block mb-2">
+              <div className="mt-5">
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-wider block mb-3">
                   Agreed Profit & Loss Distribution
                 </span>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {participants.map((p, idx) => {
                     const partnerObj = partners.find((pt) => pt.id === p.partnerId);
                     const pName = partnerObj?.name || p.externalName || `Participant ${idx + 1}`;
                     return (
                       <div
                         key={idx}
-                        className="flex items-center justify-between text-xs py-1 px-2.5 bg-afk-surface-light rounded"
+                        className="flex items-center justify-between text-xs py-2 px-3 bg-[#171A20] border border-[#282E38] rounded-lg"
                       >
-                        <span className="font-medium text-white">{pName}</span>
-                        <div className="flex items-center gap-4 text-afk-muted font-mono">
+                        <span className="font-bold text-white">{pName}</span>
+                        <div className="flex items-center gap-4 text-gray-300 font-mono">
                           <span>Committed: ৳{p.committedCapital.toLocaleString()}</span>
                           <span className="text-emerald-400 font-bold">Profit: {p.profitSharePct}%</span>
-                          <span className="text-amber-400">Loss: {p.lossSharePct}%</span>
+                          <span className="text-amber-400 font-bold">Loss: {p.lossSharePct}%</span>
                         </div>
                       </div>
                     );
@@ -950,8 +965,8 @@ export function VentureWizardClient({
               </div>
             </div>
 
-            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-xs text-emerald-400">
-              <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+            <div className="p-4 bg-emerald-500/15 border border-emerald-500/40 rounded-xl flex items-center gap-3 text-xs text-emerald-300 font-medium">
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
               <span>
                 All mathematical invariants satisfied. Ready to create venture and draft foundation agreement.
               </span>
@@ -961,12 +976,12 @@ export function VentureWizardClient({
       </div>
 
       {/* Wizard Footer Nav */}
-      <div className="p-6 bg-afk-charcoal border-t border-afk-border flex items-center justify-between">
+      <div className="p-6 bg-[#1A1E24] border-t border-[#282E38] flex items-center justify-between">
         {step > 1 ? (
           <button
             type="button"
             onClick={() => setStep((s) => s - 1)}
-            className="px-4 py-2 text-sm font-medium text-afk-muted hover:text-white bg-afk-surface border border-afk-border rounded-lg transition-colors flex items-center gap-2"
+            className="px-5 py-2.5 text-xs font-bold text-gray-200 hover:text-white bg-[#101216] border border-[#2D333F] hover:bg-[#181B20] rounded-xl transition-all flex items-center gap-2 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" /> Previous
           </button>
@@ -995,7 +1010,7 @@ export function VentureWizardClient({
               setError(null);
               setStep((s) => s + 1);
             }}
-            className="px-5 py-2 text-sm font-semibold text-white bg-afk-olive-accent hover:bg-afk-olive rounded-lg shadow-sm transition-colors flex items-center gap-2"
+            className="px-6 py-2.5 text-xs font-bold text-white bg-afk-olive hover:bg-afk-olive-accent active:bg-afk-olive-dark rounded-xl shadow-md transition-all flex items-center gap-2"
           >
             Next <ArrowRight className="w-4 h-4" />
           </button>
@@ -1004,7 +1019,7 @@ export function VentureWizardClient({
             type="button"
             disabled={submitting}
             onClick={handleFinalSubmit}
-            className="px-6 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-7 py-3 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-lg shadow-emerald-950/40 transition-all flex items-center gap-2 disabled:opacity-50"
           >
             {submitting ? "Launching Venture..." : "Launch Venture & Agreement"}
           </button>

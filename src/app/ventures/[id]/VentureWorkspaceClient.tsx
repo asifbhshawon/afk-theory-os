@@ -700,18 +700,18 @@ export function VentureWorkspaceClient({
               </div>
             </div>
 
-            <div className="flex items-center gap-4 bg-afk-surface p-3 rounded-lg border border-afk-border">
-              <span className="text-xs font-semibold text-white whitespace-nowrap">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-[#101216] p-4 rounded-xl border border-[#282E38]">
+              <span className="text-xs font-bold text-gray-200 uppercase tracking-wider whitespace-nowrap">
                 Simulated Net Profit:
               </span>
-              <div className="relative w-44">
-                <span className="absolute left-2.5 top-1.5 text-afk-muted text-xs font-bold">৳</span>
+              <div className="relative w-48">
+                <span className="absolute left-3 top-2.5 text-afk-olive-accent text-sm font-bold">৳</span>
                 <input
                   type="number"
                   step="1000"
                   value={simProfit}
                   onChange={(e) => setSimProfit(parseFloat(e.target.value) || 0)}
-                  className="w-full pl-6 pr-2 py-1 text-xs bg-afk-charcoal border border-afk-border rounded font-mono text-white"
+                  className="w-full pl-8 pr-3 py-2 text-sm bg-[#0D0F12] border border-[#2D333F] rounded-lg font-mono font-bold text-white focus:border-afk-olive-accent focus:outline-none"
                 />
               </div>
 
@@ -722,7 +722,7 @@ export function VentureWorkspaceClient({
                 step="5000"
                 value={simProfit}
                 onChange={(e) => setSimProfit(parseFloat(e.target.value) || 0)}
-                className="w-full accent-afk-olive-accent"
+                className="w-full accent-afk-olive cursor-pointer h-2 bg-[#1C2026] rounded-lg"
               />
             </div>
 
@@ -913,7 +913,7 @@ export function VentureWorkspaceClient({
       {/* MODAL: Record Contribution */}
       {showContributionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md bg-afk-charcoal border border-afk-border rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-md bg-[#14171C] border border-[#2D333F] rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-afk-border">
               <h3 className="text-base font-bold text-white">Record Venture Contribution</h3>
               <button
@@ -926,13 +926,13 @@ export function VentureWorkspaceClient({
 
             <form onSubmit={handleContributionSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Participant *
                 </label>
                 <select
                   value={contribParticipantId}
                   onChange={(e) => setContribParticipantId(e.target.value)}
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 >
                   <option value="">Company Treasury / Direct</option>
                   {(venture.participants || []).map((p: any) => (
@@ -944,13 +944,13 @@ export function VentureWorkspaceClient({
               </div>
 
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Contribution Type *
                 </label>
                 <select
                   value={contribType}
                   onChange={(e) => setContribType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 >
                   <option value="CASH">Cash Deposit</option>
                   <option value="PARTNER_LOAN">Partner Loan</option>
@@ -961,7 +961,7 @@ export function VentureWorkspaceClient({
               </div>
 
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Amount (৳ BDT) *
                 </label>
                 <input
@@ -976,13 +976,13 @@ export function VentureWorkspaceClient({
 
               {(contribType === "CASH" || contribType === "PARTNER_LOAN") && (
                 <div>
-                  <label className="block text-afk-muted uppercase font-semibold mb-1">
+                  <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                     Deposit Payment Account *
                   </label>
                   <select
                     value={contribPaymentAccId}
                     onChange={(e) => setContribPaymentAccId(e.target.value)}
-                    className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                    className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                   >
                     {paymentAccounts.map((pa) => (
                       <option key={pa.id} value={pa.id}>
@@ -994,7 +994,7 @@ export function VentureWorkspaceClient({
               )}
 
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Description
                 </label>
                 <input
@@ -1002,7 +1002,7 @@ export function VentureWorkspaceClient({
                   value={contribDescription}
                   onChange={(e) => setContribDescription(e.target.value)}
                   placeholder="e.g. Initial fabric procurement deposit"
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 />
               </div>
 
@@ -1043,7 +1043,7 @@ export function VentureWorkspaceClient({
       {/* MODAL: Create Settlement */}
       {showSettlementModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md bg-afk-charcoal border border-afk-border rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-md bg-[#14171C] border border-[#2D333F] rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-afk-border">
               <h3 className="text-base font-bold text-white">Create Allocation Snapshot & Settlement</h3>
               <button
@@ -1056,13 +1056,13 @@ export function VentureWorkspaceClient({
 
             <form onSubmit={handleSettlementSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Settlement Type *
                 </label>
                 <select
                   value={settlementType}
                   onChange={(e) => setSettlementType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 >
                   <option value="FULL">Full Settlement & Payout</option>
                   <option value="PARTIAL">Partial Settlement</option>
@@ -1072,7 +1072,7 @@ export function VentureWorkspaceClient({
               </div>
 
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Net Profit to Distribute (৳ BDT) *
                 </label>
                 <input
@@ -1085,7 +1085,7 @@ export function VentureWorkspaceClient({
               </div>
 
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Settlement Notes
                 </label>
                 <textarea
@@ -1093,7 +1093,7 @@ export function VentureWorkspaceClient({
                   value={settlementNotes}
                   onChange={(e) => setSettlementNotes(e.target.value)}
                   placeholder="Notes for voucher and audit trail..."
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 />
               </div>
 
@@ -1121,17 +1121,17 @@ export function VentureWorkspaceClient({
       {/* MODAL: Disburse Settlement */}
       {disburseSettlementId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm bg-afk-charcoal border border-afk-border rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-sm bg-[#14171C] border border-[#2D333F] rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="text-base font-bold text-white">Disburse Settlement Payout</h3>
             <form onSubmit={handleDisburseSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-afk-muted uppercase font-semibold mb-1">
+                <label className="block text-xs font-bold text-gray-200 uppercase tracking-wider mb-1.5">
                   Disburse From Account *
                 </label>
                 <select
                   value={disbursePaymentAccId}
                   onChange={(e) => setDisbursePaymentAccId(e.target.value)}
-                  className="w-full px-3 py-2 bg-afk-surface border border-afk-border rounded text-white"
+                  className="w-full px-3.5 py-2.5 bg-[#0D0F12] border border-[#2D333F] rounded-xl text-white text-xs focus:border-afk-olive-accent focus:outline-none"
                 >
                   {paymentAccounts.map((pa) => (
                     <option key={pa.id} value={pa.id}>
