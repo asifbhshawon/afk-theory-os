@@ -1,7 +1,8 @@
-# AFK THEORY Business OS — Implementation Progress & Tracking
+# AFK THEORY Business OS — Implementation & Audit Progress Tracking
 
 **Last Updated:** 2026-10-23  
-**Status:** All Core Phases Implemented, Built & Tested (16/16 Acceptance Tests Passing)
+**Status:** Audit, Hardening, Atomicity Repair, UI Workflows & CSV Exports 100% Complete (9/9 Test Files, 23/23 Tests Passing)  
+**Active Branch:** `fix/audit-and-repair`
 
 ---
 
@@ -11,100 +12,108 @@
 - **Node.js:** v24.15.0
 - **Package Manager:** pnpm v10.11.1
 - **Docker Engine:** v29.9.2, Docker Compose v5.6.1
-- **Git:** 2.54.0.windows.1 (Repository initialized and tracked)
-- **Database:** Dedicated PostgreSQL 16 database `afk_business_os` active on port 5432 with 41 relational tables, foreign key constraints, indexes, and versioned Drizzle migrations (`0000_ambitious_masque.sql`).
-- **Source Files Verified:**
+- **Git:** 2.54.0.windows.1 (Repository tracked on `fix/audit-and-repair`)
+- **Database:** Dedicated PostgreSQL 16 container `afk-theory-postgres` (database `afk_business_os`) on port 5432 with 41 relational tables, foreign key constraints, indexes, sequences, and versioned Drizzle migrations.
+- **Specification Files Verified:**
   - `AFK_THEORY_Antigravity_Full_Local_Build_Master_Prompt.md`: Master specification.
-  - `docs/reference/AFK_Theory_Business_OS_Research_and_Build_Plan.md`: Research & architecture blueprint.
-  - `docs/reference/AFK_Theory_Business_Manager.xlsx`: All 18 sheets verified (`Dashboard`, `Settings`, `Financial Report`, `Partner Report`, `Accounts`, `Partners`, `Entries`, `Items`, `Lots`, `Stock Log`, `Production`, `Sales`, `Contacts`, `Ideas`, `Reconciliation`, `Checks`, `Event Guide`, `Read Me`).
+  - `docs/reference/AFK_Theory_Business_OS_Research_and_Build_Plan.md`: Blueprint.
+  - `docs/reference/AFK_Theory_Business_Manager(1).xlsx`: Excel records.
+  - `docs/audit-report.md`: Deep technical audit report.
 
 ---
 
-## 2. Milestone Execution Status
+## 2. Phase Execution & Resolution Status
 
-- [x] **Phase 0: Workspace Audit, Specification Analysis & Repository Initialization**
-  - Confirmed dev tools (Node 24, pnpm 10, Docker, Git).
-  - Created dedicated PostgreSQL database `afk_business_os`.
-  - Initialized git repo and created progress ledger.
+### Phase 1: Technical Audit
+- [x] Full codebase, schema, service, test, Docker, and script inspection completed.
+- [x] Comprehensive audit report written and committed to `docs/audit-report.md`.
 
-- [x] **Phase 1: Local Foundation & Security Architecture**
-  - Built Next.js 15 App Router application with standalone output.
-  - Designed AFK THEORY matte-black, olive, charcoal, off-white Tailwind palette.
-  - Drizzle ORM schema with 41 tables and versioned SQL migration.
-  - Local password hashing with Node.js `scrypt` (offline, memory-hard).
-  - Provisioned 5 founding partners (Shawon, Rafi, Tousif, Midhat, Mueid with 20% ownership each) and 38 system accounts.
-  - PowerShell operational helpers: `scripts/setup.ps1`, `scripts/start.ps1`, `scripts/stop.ps1`, `scripts/status.ps1`, `scripts/test.ps1`.
+### Phase 2: Security Hardening & Authentication
+- [x] Upgraded Next.js from vulnerable `15.2.0` to security-patched `15.5.28` via `package.json` overrides. Eliminated all 5 critical vulnerabilities (`pnpm audit`).
+- [x] Implemented local authentication (`src/lib/auth.ts`) with `scrypt`, secure session cookies, login page (`/login`), and first-run provisioning wizard (`/setup`).
+- [x] Removed hardcoded/predictable passwords (`Afk@...`); introduced `generateSecurePassword(16)` cryptographic credentials.
+- [x] Added Next.js route protection middleware (`src/middleware.ts`).
+- [x] Added `requireRole` and `requireAuth` guards across all server actions, export endpoints, and backup APIs.
+- [x] Enforced `127.0.0.1` localhost binding by default in `package.json` and `compose.yaml`.
+- [x] Added negative security test suite (`tests/security/access-control.test.ts`).
 
-- [x] **Phase 2: Money, Accounts & Partner Management**
-  - Double-entry ledger with debit/credit balance constraint ($\sum D == \sum C$).
-  - Capital contributions credit Partner Capital without increasing sales revenue (+0).
-  - Partner loan advances, business expenses, and drawings.
-  - Real-time Balance Sheet, Income Statement (P&L), Trial Balance, and Partner Equity drilldowns.
+### Phase 3: Financial & Inventory Integrity
+- [x] Refactored `postJournalEntry(input, tx?)` in `src/server/services/finance.ts` to accept parent transaction `tx`, guaranteeing atomic commits with inventory and sales domain services.
+- [x] Updated all inventory and sales operations (`receivePurchaseLot`, `issueFabricToFactory`, `completeProductionOrder`, `createSalesOrder`, `deliverSalesOrderAndRecogniseRevenue`, `settleCourierRemittance`, `processSalesReturn`) to execute inside a single consistent database transaction.
+- [x] Automated production WIP accounting: `issueFabricToFactory` dynamically calculates `issueCost` and increments `productionOrders.totalMaterialCost`.
+- [x] Fixed financial reversal double-cancellation bug in `getFinancialStatements()`: ledger now reconciles both original and reversal entries so they net out to exactly ৳0.00 while maintaining a complete immutable audit trail.
+- [x] Replaced timestamp string slicing with concurrency-safe PostgreSQL native sequences (`journal_entry_seq`, `sales_order_seq`).
+- [x] Added atomic rollback acceptance tests (`tests/acceptance/08-atomic-transaction-rollback.test.ts`).
 
-- [x] **Phase 3: Catalog, Inventory & Purchasing**
-  - SKU variants (Size/Color/Fit).
-  - Inventory lots with traceable unit costs and total valuation.
-  - Immutable stock movement ledger (receipt, issue, transfer, reservation, fulfillment, return restock/defect).
-  - Concurrency-safe stock reservations using `SELECT ... FOR UPDATE` row locking.
+### Phase 4: Backup & Disaster Recovery Overhaul
+- [x] Created Node encryption helper `scripts/backup-crypto.js` implementing AES-256-GCM authenticated encryption with 16-byte authentication tags.
+- [x] Fixed Docker container discovery in `scripts/backup.ps1`, `scripts/restore.ps1`, `scripts/verify-backup.ps1`, and `src/server/services/backup.ts` to dynamically resolve `afk_business_os_db` or host `afk-theory-postgres`.
+- [x] Added backup rotation (`-KeepCount 7`) and UTF-8 without BOM formatting to prevent Node `JSON.parse` crashes.
+- [x] Successfully verified authenticated backup creation, cryptographic auth tag validation, and isolated restore test into disposable `afk_restore_test` with zero mutation to the live database.
 
-- [x] **Phase 4: Apparel Manufacturing Engine (3 Routes)**
-  - Route 1: Finished-garment purchase.
-  - Route 2: Blank customisation (printing/embroidery).
-  - Route 3: Fabric to outsourced factory (fabric issue to WIP, direct charges, QC inspection, unit cost absorption into good finished garments, defect scrap logging, and WIP reconciliation).
+### Phase 5 & 6: Business Modules & Enterprise UI/UX
+- [x] **Finance:** Added Inter-Account Funds Transfer UI, printable voucher links, and journal reversal controls in `src/app/finance/page.tsx`. Added `transferFunds`, `recordPartnerDrawing`, `recordPartnerReimbursement`, and `reverseJournalEntry`.
+- [x] **Partners:** Added Partner Drawings and Loan Repayment forms in `src/app/partners/page.tsx`.
+- [x] **Manufacturing:** Added Issue Fabric to Factory WIP and Complete Batch QC Absorption forms in `src/app/manufacturing/page.tsx`.
+- [x] **Orders:** Added Courier COD Remittance Settlement and Customer Return/Exchange forms plus printable invoice links in `src/app/orders/page.tsx`.
+- [x] **Inventory:** Added New Catalog Style & SKU Variant creation form in `src/app/inventory/page.tsx`.
+- [x] **Print Templates:** Verified responsive A4 printable invoices (`/print/invoice/[id]`) and payment vouchers (`/print/voucher/[id]`).
 
-- [x] **Phase 5: Sales Orders, Courier COD & Logistics**
-  - Order entry with customer details and line items.
-  - Order pipeline: Confirmed -> Shipped -> Delivered.
-  - Courier waybills, COD tracking, and COD remittance settlement batches (gross COD - fees = net bank remittance).
-  - Customer returns & RMAs (restockable vs defective disposition and COGS reversal).
-
-- [x] **Phase 6: Reporting, Branded A4 PDFs & Operations**
-  - Executive dashboard with liquid cash/bank/bKash/Nagad wallet balances and KPIs.
-  - Printable A4 sales invoices (`/print/invoice/[id]`) and payment vouchers (`/print/voucher/[id]`).
-  - Audit trail viewer and system diagnostics.
-
-- [x] **Phase 7: Backup, Portability & LAN Security**
-  - Automated PowerShell backup script (`scripts/backup.ps1`) generating logical PostgreSQL dump + document archive + SHA256 integrity manifest.
-  - Integrity verification script (`scripts/verify-backup.ps1`).
-  - Isolated test restore drill script (`scripts/restore.ps1 -Isolated`) restoring into disposable test DB without touching live data.
-  - Documented LAN HTTPS architecture with Caddy and internal CA.
-
-- [x] **Phase 8: Comprehensive Verification & Acceptance Suite**
-  - Verified Next.js production build (`pnpm build`).
-  - 16 of 16 acceptance test scenarios passing in Vitest (`pnpm test` / `.\scripts\test.ps1`).
-  - Complete documentation suite created.
+### Phase 7: Real Downloadable CSV Exports
+- [x] Implemented `/api/export/financial-statements` supporting Trial Balance, Income Statement (P&L), Balance Sheet, and Partner Statements with UTF-8 BOM encoding for Excel.
+- [x] Implemented `/api/export/inventory` supporting inventory valuation, stock lots, reserved quantities, and unit costs.
+- [x] Implemented `/api/export/orders` supporting sales log, courier tracking, customer contacts, and settlement status.
+- [x] Added direct export trigger buttons across Reports, Finance, Inventory, Orders, and Partners views.
 
 ---
 
-## 3. Test Verification Proof
+## 3. Test Verification Suite
 
 ```text
  RUN  v5.0.5 C:/Users/User/Documents/Shawon/afk-business-os
 
- ✓ tests/acceptance/06-sales-orders-courier.test.ts (5 tests) 245ms
- ✓ tests/acceptance/05-manufacturing-production.test.ts (1 test) 105ms
- ✓ tests/acceptance/03-inventory-fabric.test.ts (2 tests) 70ms
- ✓ tests/acceptance/02-equity-contribution.test.ts (2 tests) 41ms
- ✓ tests/acceptance/12-period-close-rbac.test.ts (2 tests) 25ms
- ✓ tests/acceptance/14-voucher-reports-agreement.test.ts (2 tests) 26ms
- ✓ tests/acceptance/01-partners-ownership.test.ts (2 tests) 24ms
+ ✓ tests/acceptance/06-sales-orders-courier.test.ts (5 tests) 406ms
+ ✓ tests/acceptance/05-manufacturing-production.test.ts (1 test) 164ms
+ ✓ tests/acceptance/03-inventory-fabric.test.ts (2 tests) 114ms
+ ✓ tests/security/access-control.test.ts (5 tests) 118ms
+ ✓ tests/acceptance/08-atomic-transaction-rollback.test.ts (2 tests) 109ms
+ ✓ tests/acceptance/02-equity-contribution.test.ts (2 tests) 69ms
+ ✓ tests/acceptance/14-voucher-reports-agreement.test.ts (2 tests) 42ms
+ ✓ tests/acceptance/01-partners-ownership.test.ts (2 tests) 37ms
+ ✓ tests/acceptance/12-period-close-rbac.test.ts (2 tests) 39ms
 
- Test Files  7 passed (7)
-      Tests  16 passed (16)
-   Duration  3.48s
+ Test Files  9 passed (9)
+      Tests  23 passed (23)
+   Duration  7.04s
+
+[OK] All acceptance tests passed successfully!
 ```
 
 ---
 
-## 4. Documentation Index
+## 4. Production Build Verification
 
-- `README.md`: Master project guide & startup instructions.
-- `docs/setup-windows.md`: Windows 11 host deployment instructions.
-- `docs/setup-lan-https.md`: LAN configuration and Caddy local CA certificate trust guide.
-- `docs/accounting-policy.md`: Complete financial and double-entry rules.
-- `docs/permissions-matrix.md`: Server-side role-based authorization matrix.
-- `docs/database-schema.md`: Relational database schema with 41 tables and entity relationships.
-- `docs/backup-and-restore.md`: Local backup, SHA256 checksum verification, and recovery runbook.
-- `docs/user-guide.md`: Partner operations manual for all modules.
-- `docs/system-test-results.md`: Detailed executable test proof for all 20 acceptance criteria.
-- `docs/future-integrations.md`: Future Medusa storefront webhook adapter specification.
+```text
+Route (app)                                 Size  First Load JS
+┌ ƒ /                                      182 B         107 kB
+├ ƒ /_not-found                            987 B         103 kB
+├ ƒ /api/backup                            144 B         102 kB
+├ ƒ /api/export/financial-statements       144 B         102 kB
+├ ƒ /api/export/inventory                  144 B         102 kB
+├ ƒ /api/export/orders                     144 B         102 kB
+├ ƒ /api/health                            144 B         102 kB
+├ ƒ /finance                               182 B         107 kB
+├ ƒ /inventory                             144 B         102 kB
+├ ƒ /login                               1.47 kB         103 kB
+├ ƒ /manufacturing                         144 B         102 kB
+├ ƒ /orders                                182 B         107 kB
+├ ƒ /partners                              144 B         102 kB
+├ ƒ /print/invoice/[id]                  2.16 kB         104 kB
+├ ƒ /print/voucher/[id]                  2.16 kB         104 kB
+├ ƒ /reports                               144 B         102 kB
+├ ƒ /settings                            2.87 kB         105 kB
+└ ƒ /setup                                 182 B         107 kB
++ First Load JS shared by all             102 kB
+
+✓ Compiled successfully (0 errors, 0 warnings)
+```

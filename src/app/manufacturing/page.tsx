@@ -1,8 +1,10 @@
 import { db } from "@/db";
-import { productionOrders, productVariants, products, paymentAccounts } from "@/db/schema";
+import { productionOrders, productVariants, products, paymentAccounts, inventoryLots } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { createProductionOrder, addProductionCost, completeProductionOrder } from "@/server/services/manufacturing";
+import { issueFabricToFactory } from "@/server/services/inventory";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +41,21 @@ export default async function ManufacturingPage() {
 
   const payAccounts = await db.select().from(paymentAccounts);
 
+  const fabricLots = await db
+    .select({
+      id: inventoryLots.id,
+      lotNumber: inventoryLots.lotNumber,
+      sku: productVariants.sku,
+      currentQuantity: inventoryLots.currentQuantity,
+      unitCost: inventoryLots.unitCost,
+    })
+    .from(inventoryLots)
+    .innerJoin(productVariants, eq(inventoryLots.variantId, productVariants.id))
+    .where(eq(inventoryLots.status, "ACTIVE"));
+
   async function handleCreateOrder(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
     const orderNumber = formData.get("orderNumber") as string;
     const routeType = formData.get("routeType") as "FINISHED_PURCHASE" | "BLANK_CUSTOMIZATION" | "FABRIC_OUTSOURCED";
     const variantId = formData.get("targetVariantId") as string;
@@ -56,13 +71,68 @@ export default async function ManufacturingPage() {
       targetVariantId: variantId,
       plannedQuantity,
       notes,
+      userId: user.id,
     });
 
     revalidatePath("/manufacturing");
   }
 
+  async function handleIssueFabric(formData: FormData) {
+    "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
+    const productionOrderId = formData.get("productionOrderId") as string;
+    const lotId = formData.get("lotId") as string;
+    const quantity = Number(formData.get("quantity"));
+    const notes = formData.get("notes") as string;
+
+    if (!productionOrderId || !lotId || !quantity) {
+      throw new Error("Order, fabric lot, and quantity are required");
+    }
+
+    await issueFabricToFactory({
+      lotId,
+      quantity,
+      productionOrderId,
+      notes,
+      userId: user.id,
+    });
+
+    revalidatePath("/manufacturing");
+    revalidatePath("/inventory");
+    revalidatePath("/finance");
+  }
+
+  async function handleCompleteOrder(formData: FormData) {
+    "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
+    const productionOrderId = formData.get("productionOrderId") as string;
+    const finishedLotNumber = formData.get("finishedLotNumber") as string;
+    const goodUnits = Number(formData.get("goodUnits"));
+    const defectUnits = Number(formData.get("defectUnits") || 0);
+    const notes = formData.get("notes") as string;
+
+    if (!productionOrderId || !finishedLotNumber || !goodUnits) {
+      throw new Error("Order, lot number, and good units are required");
+    }
+
+    await completeProductionOrder({
+      productionOrderId,
+      finishedLotNumber,
+      goodUnits,
+      defectUnits: defectUnits || undefined,
+      notes,
+      userId: user.id,
+    });
+
+    revalidatePath("/manufacturing");
+    revalidatePath("/inventory");
+    revalidatePath("/finance");
+    revalidatePath("/");
+  }
+
   async function handleAddCost(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "MFG_MGR"]);
     const productionOrderId = formData.get("productionOrderId") as string;
     const costType = formData.get("costType") as string;
     const amount = Number(formData.get("amount"));
@@ -75,6 +145,7 @@ export default async function ManufacturingPage() {
       amount,
       paymentAccountId: paymentAccountId || undefined,
       notes,
+      userId: user.id,
     });
 
     revalidatePath("/manufacturing");
@@ -301,6 +372,158 @@ export default async function ManufacturingPage() {
               className="w-full py-2 bg-afk-surface hover:bg-afk-surfaceLight border border-afk-border text-afk-offwhite font-semibold rounded transition"
             >
               Post Production Cost to WIP
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Forms Section 2: Issue Fabric to WIP & Complete Batch QC */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Issue Fabric to Order Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Issue Raw Fabric to Factory WIP</h3>
+          <form action={handleIssueFabric} className="space-y-3 text-xs">
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Production Order</label>
+              <select
+                name="productionOrderId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Target Order...</option>
+                {orders
+                  .filter((o) => o.status !== "COMPLETED")
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.orderNumber} ({o.sku} - {o.plannedQuantity} pcs)
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Source Fabric Lot</label>
+              <select
+                name="lotId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Fabric Lot...</option>
+                {fabricLots.map((fl) => (
+                  <option key={fl.id} value={fl.id}>
+                    {fl.lotNumber} ({fl.sku} - Available: {fl.currentQuantity} units @ ৳{fl.unitCost})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Quantity to Issue (KG / Yards)</label>
+              <input
+                type="number"
+                name="quantity"
+                step="0.01"
+                min="0.1"
+                required
+                placeholder="e.g. 15.5"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Issue Notes</label>
+              <input
+                type="text"
+                name="notes"
+                placeholder="e.g. Sent via delivery van to factory floor"
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite font-semibold rounded transition cursor-pointer"
+            >
+              Issue Fabric to Factory Floor
+            </button>
+          </form>
+        </div>
+
+        {/* Complete Batch Order Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Complete Batch & QC Final Valuation</h3>
+          <form action={handleCompleteOrder} className="space-y-3 text-xs">
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Production Order</label>
+              <select
+                name="productionOrderId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Order to Complete...</option>
+                {orders
+                  .filter((o) => o.status !== "COMPLETED")
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.orderNumber} (Material: ৳{o.totalMaterialCost}, Direct: ৳{o.totalDirectCost})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Finished Lot #</label>
+                <input
+                  type="text"
+                  name="finishedLotNumber"
+                  required
+                  placeholder="e.g. LOT-TEE-BLK-M-01"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Good Units (Passed QC)</label>
+                <input
+                  type="number"
+                  name="goodUnits"
+                  min="1"
+                  required
+                  placeholder="e.g. 95"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Defect Units (Quarantined)</label>
+                <input
+                  type="number"
+                  name="defectUnits"
+                  min="0"
+                  placeholder="0"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">QC Notes</label>
+                <input
+                  type="text"
+                  name="notes"
+                  placeholder="e.g. Verified stitching and tags"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite font-semibold rounded transition cursor-pointer"
+            >
+              Absorb WIP & Receive Finished Lot
             </button>
           </form>
         </div>

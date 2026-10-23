@@ -38,16 +38,20 @@ export interface CreateSalesOrderInput {
   idempotencyKey?: string;
 }
 
-// Generate unique sequential order number
-export async function generateOrderNumber(): Promise<string> {
+// Generate unique sequential order number backed by atomic PostgreSQL sequence (concurrency-safe)
+export async function generateOrderNumber(txClient?: any): Promise<string> {
+  const client = txClient || db;
   const year = new Date().getFullYear();
-  const [result] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(salesOrders);
-
-  const seq = (Number(result?.count || 0) + 1).toString().padStart(5, "0");
-  const rand = Math.floor(Math.random() * 90 + 10);
-  return `AFK-ORD-${year}-${seq}${rand}`;
+  try {
+    const res = await client.execute(sql`SELECT nextval('sales_order_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-ORD-${year}-${seq}`;
+  } catch {
+    await client.execute(sql`CREATE SEQUENCE IF NOT EXISTS sales_order_seq START WITH 100001`);
+    const res = await client.execute(sql`SELECT nextval('sales_order_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-ORD-${year}-${seq}`;
+  }
 }
 
 // Create sales order with atomic stock reservation (concurrency safe)
@@ -344,42 +348,48 @@ export async function deliverSalesOrderAndRecogniseRevenue(data: {
       });
     }
 
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "SALES",
-      description: `Sales revenue recognized for ${order.orderNumber} (${order.customerName})`,
-      reference: `${order.orderNumber}-REV`,
-      sourceModule: "SALES",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: revenueLines,
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "SALES",
+        description: `Sales revenue recognized for ${order.orderNumber} (${order.customerName})`,
+        reference: `${order.orderNumber}-REV`,
+        sourceModule: "SALES",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: revenueLines,
+      },
+      tx
+    );
 
-    // 4. Post COGS Journal:
+    // 4. Post COGS Journal inside the same transaction:
     // Debit COGS (5010), Credit Finished Inventory (1230)
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "SALES",
-      description: `COGS recognized for order ${order.orderNumber}`,
-      reference: `${order.orderNumber}-COGS`,
-      sourceModule: "SALES",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: cogsAcc.id,
-          debit: totalCogs,
-          credit: 0,
-          memo: `Cost of goods sold for ${order.orderNumber}`,
-        },
-        {
-          accountId: finInvAcc.id,
-          debit: 0,
-          credit: totalCogs,
-          memo: `Finished inventory consumed on delivery`,
-        },
-      ],
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "SALES",
+        description: `COGS recognized for order ${order.orderNumber}`,
+        reference: `${order.orderNumber}-COGS`,
+        sourceModule: "SALES",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: cogsAcc.id,
+            debit: totalCogs,
+            credit: 0,
+            memo: `Cost of goods sold for ${order.orderNumber}`,
+          },
+          {
+            accountId: finInvAcc.id,
+            debit: 0,
+            credit: totalCogs,
+            memo: `Finished inventory consumed on delivery`,
+          },
+        ],
+      },
+      tx
+    );
 
     return { success: true, order, totalCogs, totalReceivable };
   });
@@ -427,34 +437,37 @@ export async function settleCourierRemittance(data: {
     // Debit Bank/bKash (Net Cash Remitted)
     // Debit Courier Delivery & COD Fees (Expense)
     // Credit Courier Receivables (Gross COD Cleared)
-    const journal = await postJournalEntry({
-      date: new Date(),
-      entryType: "SETTLEMENT",
-      description: `Courier COD remittance from ${courier.name} (${setNumber})`,
-      reference: setNumber,
-      sourceModule: "COURIER",
-      userId: data.userId,
-      lines: [
-        {
-          accountId: payAcc.glAccountId,
-          debit: netRemittance,
-          credit: 0,
-          memo: `Net remittance deposited to ${payAcc.name}`,
-        },
-        {
-          accountId: courierFeeAcc.id,
-          debit: totalFees,
-          credit: 0,
-          memo: `Courier delivery & COD fee deducted`,
-        },
-        {
-          accountId: courierRecAcc.id,
-          debit: 0,
-          credit: totalCod,
-          memo: `Settlement of courier receivables for ${data.settlements.length} orders`,
-        },
-      ],
-    });
+    const journal = await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "SETTLEMENT",
+        description: `Courier COD remittance from ${courier.name} (${setNumber})`,
+        reference: setNumber,
+        sourceModule: "COURIER",
+        userId: data.userId,
+        lines: [
+          {
+            accountId: payAcc.glAccountId,
+            debit: netRemittance,
+            credit: 0,
+            memo: `Net remittance deposited to ${payAcc.name}`,
+          },
+          {
+            accountId: courierFeeAcc.id,
+            debit: totalFees,
+            credit: 0,
+            memo: `Courier delivery & COD fee deducted`,
+          },
+          {
+            accountId: courierRecAcc.id,
+            debit: 0,
+            credit: totalCod,
+            memo: `Settlement of courier receivables for ${data.settlements.length} orders`,
+          },
+        ],
+      },
+      tx
+    );
 
     // 2. Insert Settlement Record
     const [settlement] = await tx
@@ -547,62 +560,68 @@ export async function processSalesReturn(data: {
       .set({ status: "RETURNED" })
       .where(eq(salesOrders.id, order.id));
 
-    // 2. Post Revenue Reversal:
+    // 2. Post Revenue Reversal inside the same transaction:
     // Debit Sales Returns (Contra-Revenue), Credit Bank/Customer Receivables
-    const journal = await postJournalEntry({
-      date: new Date(),
-      entryType: "SALES",
-      description: `Sales return refund for ${order.orderNumber} (${returnNumber})`,
-      reference: returnNumber,
-      sourceModule: "RETURNS",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: returnRevAcc.id,
-          debit: data.refundAmount,
-          credit: 0,
-          memo: `Sales return contra-revenue for ${order.orderNumber}`,
-        },
-        {
-          accountId: creditAccountId,
-          debit: 0,
-          credit: data.refundAmount,
-          memo: `Refund payout`,
-        },
-      ],
-    });
+    const journal = await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "SALES",
+        description: `Sales return refund for ${order.orderNumber} (${returnNumber})`,
+        reference: returnNumber,
+        sourceModule: "RETURNS",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: returnRevAcc.id,
+            debit: data.refundAmount,
+            credit: 0,
+            memo: `Sales return contra-revenue for ${order.orderNumber}`,
+          },
+          {
+            accountId: creditAccountId,
+            debit: 0,
+            credit: data.refundAmount,
+            memo: `Refund payout`,
+          },
+        ],
+      },
+      tx
+    );
 
-    // 3. Post Inventory / COGS Reversal:
+    // 3. Post Inventory / COGS Reversal inside the same transaction:
     // If Restockable: Debit Finished Goods Inventory, Credit COGS
     // If Defective: Debit Production Wastage & Rejects, Credit COGS
     const inventoryDebitAccountId = data.isRestockable ? finInvAcc.id : defectAcc.id;
     const targetLocationId = data.isRestockable ? mainWh.id : damagedLoc.id;
     const movementType = data.isRestockable ? "RETURN_RESTOCK" : "RETURN_DEFECT";
 
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "SALES",
-      description: `Inventory return disposition (${data.isRestockable ? "Restocked" : "Defective"}) for ${order.orderNumber}`,
-      reference: `${returnNumber}-INV`,
-      sourceModule: "RETURNS",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: inventoryDebitAccountId,
-          debit: totalCogsToReverse,
-          credit: 0,
-          memo: data.isRestockable ? `Garment returned to finished stock` : `Garment written off as defective`,
-        },
-        {
-          accountId: cogsAcc.id,
-          debit: 0,
-          credit: totalCogsToReverse,
-          memo: `COGS reversal upon customer return`,
-        },
-      ],
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "SALES",
+        description: `Inventory return disposition (${data.isRestockable ? "Restocked" : "Defective"}) for ${order.orderNumber}`,
+        reference: `${returnNumber}-INV`,
+        sourceModule: "RETURNS",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: inventoryDebitAccountId,
+            debit: totalCogsToReverse,
+            credit: 0,
+            memo: data.isRestockable ? `Garment returned to finished stock` : `Garment written off as defective`,
+          },
+          {
+            accountId: cogsAcc.id,
+            debit: 0,
+            credit: totalCogsToReverse,
+            memo: `COGS reversal upon customer return`,
+          },
+        ],
+      },
+      tx
+    );
 
     // 4. Record stock movement and restore lot if restockable
     for (const line of lines) {
@@ -656,5 +675,26 @@ export async function processSalesReturn(data: {
       .returning();
 
     return rma;
+  });
+}
+
+export async function processReturnOrExchange(data: {
+  orderId?: string;
+  salesOrderId?: string;
+  reason: string;
+  isRestockable: boolean;
+  refundAmount: number;
+  paymentAccountId?: string;
+  userId?: string;
+  notes?: string;
+}) {
+  return processSalesReturn({
+    salesOrderId: data.orderId || data.salesOrderId!,
+    reason: data.reason,
+    isRestockable: data.isRestockable,
+    refundAmount: data.refundAmount,
+    paymentAccountId: data.paymentAccountId,
+    userId: data.userId,
+    notes: data.notes,
   });
 }

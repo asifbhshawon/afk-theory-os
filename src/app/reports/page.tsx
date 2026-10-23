@@ -7,12 +7,44 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="pb-2 border-b border-afk-border flex items-center justify-between">
+      <div className="pb-4 border-b border-afk-border flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Financial Reports & Statements</h2>
           <p className="text-xs text-afk-muted mt-0.5">
             Real-time balance sheet, income statement, trial balance, and partner capital accounts computed from posted journals.
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/api/export/financial-statements?type=trial-balance"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 Trial Balance (CSV)</span>
+          </a>
+          <a
+            href="/api/export/financial-statements?type=income-statement"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 P&L (CSV)</span>
+          </a>
+          <a
+            href="/api/export/financial-statements?type=balance-sheet"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 Balance Sheet (CSV)</span>
+          </a>
+          <a
+            href="/api/export/financial-statements?type=partner-statements"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 Partners (CSV)</span>
+          </a>
+          <a
+            href="/api/export/inventory"
+            className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+          >
+            <span>📥 Stock (CSV)</span>
+          </a>
         </div>
       </div>
 

@@ -102,30 +102,33 @@ export async function addProductionCost(data: {
       .set({ totalDirectCost: newDirectCost.toFixed(2) })
       .where(eq(productionOrders.id, order.id));
 
-    // 3. Post to GL: Debit WIP (1220), Credit Bank/Payables
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "PRODUCTION",
-      description: `Production cost (${data.costType}) for order ${order.orderNumber}: ৳${data.amount.toFixed(2)}`,
-      reference: `${order.orderNumber}-${data.costType}`,
-      sourceModule: "MANUFACTURING",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: wipAcc.id,
-          debit: data.amount,
-          credit: 0,
-          memo: `Direct production cost (${data.costType})`,
-        },
-        {
-          accountId: creditAccountId,
-          debit: 0,
-          credit: data.amount,
-          memo,
-        },
-      ],
-    });
+    // 3. Post to GL: Debit WIP (1220), Credit Bank/Payables inside the same transaction
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "PRODUCTION",
+        description: `Production cost (${data.costType}) for order ${order.orderNumber}: ৳${data.amount.toFixed(2)}`,
+        reference: `${order.orderNumber}-${data.costType}`,
+        sourceModule: "MANUFACTURING",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: wipAcc.id,
+            debit: data.amount,
+            credit: 0,
+            memo: `Direct production cost (${data.costType})`,
+          },
+          {
+            accountId: creditAccountId,
+            debit: 0,
+            credit: data.amount,
+            memo,
+          },
+        ],
+      },
+      tx
+    );
 
     return cost;
   });
@@ -272,57 +275,63 @@ export async function completeProductionOrder(data: {
         });
 
         // Journal: Debit Raw Materials (1210), Credit WIP (1220)
-        await postJournalEntry({
-          date: new Date(),
-          entryType: "PRODUCTION",
-          description: `Unused fabric returned from factory for ${order.orderNumber}`,
-          reference: order.orderNumber,
-          sourceModule: "MANUFACTURING",
-          sourceId: order.id,
-          userId: data.userId,
-          lines: [
-            {
-              accountId: matAcc.id,
-              debit: returnedMaterialCost,
-              credit: 0,
-              memo: `Raw material returned to stock`,
-            },
-            {
-              accountId: wipAcc.id,
-              debit: 0,
-              credit: returnedMaterialCost,
-              memo: `WIP reduction for returned raw material`,
-            },
-          ],
-        });
+        await postJournalEntry(
+          {
+            date: new Date(),
+            entryType: "PRODUCTION",
+            description: `Unused fabric returned from factory for ${order.orderNumber}`,
+            reference: order.orderNumber,
+            sourceModule: "MANUFACTURING",
+            sourceId: order.id,
+            userId: data.userId,
+            lines: [
+              {
+                accountId: matAcc.id,
+                debit: returnedMaterialCost,
+                credit: 0,
+                memo: `Raw material returned to stock`,
+              },
+              {
+                accountId: wipAcc.id,
+                debit: 0,
+                credit: returnedMaterialCost,
+                memo: `WIP reduction for returned raw material`,
+              },
+            ],
+          },
+          tx
+        );
       }
     }
 
-    // 7. Post GL Journal: Reconcile WIP to Finished Goods
+    // 7. Post GL Journal: Reconcile WIP to Finished Goods inside the same transaction
     // Debit Finished Goods Inventory (1230), Credit WIP (1220)
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "PRODUCTION",
-      description: `Production completed for ${order.orderNumber}: Lot ${finishedLot.lotNumber} (${data.goodUnits} pcs @ ৳${perUnitCost.toFixed(2)})`,
-      reference: `${order.orderNumber}-COMPLETION`,
-      sourceModule: "MANUFACTURING",
-      sourceId: order.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: finAcc.id,
-          debit: finishedStockValue,
-          credit: 0,
-          memo: `Finished garments received into stock`,
-        },
-        {
-          accountId: wipAcc.id,
-          debit: 0,
-          credit: finishedStockValue,
-          memo: `WIP absorbed into finished goods inventory`,
-        },
-      ],
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "PRODUCTION",
+        description: `Production completed for ${order.orderNumber}: Lot ${finishedLot.lotNumber} (${data.goodUnits} pcs @ ৳${perUnitCost.toFixed(2)})`,
+        reference: `${order.orderNumber}-COMPLETION`,
+        sourceModule: "MANUFACTURING",
+        sourceId: order.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: finAcc.id,
+            debit: finishedStockValue,
+            credit: 0,
+            memo: `Finished garments received into stock`,
+          },
+          {
+            accountId: wipAcc.id,
+            debit: 0,
+            credit: finishedStockValue,
+            memo: `WIP absorbed into finished goods inventory`,
+          },
+        ],
+      },
+      tx
+    );
 
     // 8. Update production order status to COMPLETED
     await tx

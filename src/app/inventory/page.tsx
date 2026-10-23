@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { products, productVariants, inventoryLots, stockMovements, locations, paymentAccounts } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
-import { receivePurchaseLot } from "@/server/services/inventory";
+import { receivePurchaseLot, createProductWithVariants } from "@/server/services/inventory";
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,8 @@ export default async function InventoryPage() {
 
   async function handleReceiveLot(formData: FormData) {
     "use server";
+    const user = await requireRole(["ADMIN", "INVENTORY_MGR"]);
+
     const variantId = formData.get("variantId") as string;
     const lotNumber = formData.get("lotNumber") as string;
     const quantity = Number(formData.get("quantity"));
@@ -76,6 +79,7 @@ export default async function InventoryPage() {
       unitCost,
       paymentAccountId,
       isRawMaterial,
+      userId: user.id,
     });
 
     revalidatePath("/inventory");
@@ -83,96 +87,266 @@ export default async function InventoryPage() {
     revalidatePath("/");
   }
 
+  async function handleCreateProduct(formData: FormData) {
+    "use server";
+    const user = await requireRole(["ADMIN", "INVENTORY_MGR"]);
+    const name = formData.get("name") as string;
+    const styleCode = formData.get("styleCode") as string;
+    const category = formData.get("category") as string;
+    const productType = formData.get("productType") as string;
+    const size = formData.get("size") as string;
+    const color = formData.get("color") as string;
+    const sellingPrice = Number(formData.get("sellingPrice") || 0);
+    const costPrice = Number(formData.get("costPrice") || 0);
+
+    if (!name || !styleCode || !category || !size || !color) {
+      throw new Error("Product name, style code, category, size, and color are required");
+    }
+
+    const sku = `${styleCode}-${color.slice(0, 3).toUpperCase()}-${size.toUpperCase()}`;
+
+    await createProductWithVariants({
+      name,
+      styleCode,
+      category,
+      productType,
+      retailPrice: sellingPrice,
+      variants: [
+        {
+          sku,
+          size,
+          color,
+          sellingPrice,
+          costPrice,
+        },
+      ],
+    });
+
+    revalidatePath("/inventory");
+  }
+
   return (
     <div className="space-y-6">
-      <div className="pb-2 border-b border-afk-border">
-        <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Catalog & Inventory Management</h2>
-        <p className="text-xs text-afk-muted mt-0.5">
-          SKU variants, lot-based actual costing, and immutable stock movement ledger.
-        </p>
+      <div className="pb-3 border-b border-afk-border flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-afk-offwhite">Catalog & Inventory Management</h2>
+          <p className="text-xs text-afk-muted mt-0.5">
+            SKU variants, lot-based actual costing, and immutable stock movement ledger.
+          </p>
+        </div>
+        <a
+          href="/api/export/inventory"
+          className="px-3 py-1.5 bg-afk-surface hover:bg-afk-olive/20 text-afk-offwhite text-xs font-semibold rounded border border-afk-border flex items-center gap-1.5 transition-colors"
+        >
+          <span>📥 Export Inventory (CSV)</span>
+        </a>
       </div>
 
-      {/* Receive Purchase Lot Form */}
-      <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
-        <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Receive Goods / Raw Materials Lot</h3>
-        <form action={handleReceiveLot} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
-          <div>
-            <label className="block text-[11px] text-afk-muted mb-1 font-medium">SKU Variant</label>
-            <select
-              name="variantId"
-              required
-              className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
-            >
-              <option value="">Select SKU...</option>
-              {allVariants.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.sku} ({v.productName} - {v.size}/{v.color})
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Inventory Action Forms Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Receive Purchase Lot Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Receive Goods / Raw Materials Lot</h3>
+          <form action={handleReceiveLot} className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">SKU Variant</label>
+                <select
+                  name="variantId"
+                  required
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                >
+                  <option value="">Select SKU...</option>
+                  {allVariants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.sku} ({v.productName} - {v.size}/{v.color})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-[11px] text-afk-muted mb-1 font-medium">Lot Number</label>
-            <input
-              type="text"
-              name="lotNumber"
-              required
-              placeholder="e.g. LOT-2026-005"
-              className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
-            />
-          </div>
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Lot Number</label>
+                <input
+                  type="text"
+                  name="lotNumber"
+                  required
+                  placeholder="e.g. LOT-2026-005"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-[11px] text-afk-muted mb-1 font-medium">Quantity</label>
-            <input
-              type="number"
-              name="quantity"
-              min="1"
-              required
-              placeholder="Qty received"
-              className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
-            />
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Quantity</label>
+                <input
+                  type="number"
+                  name="quantity"
+                  min="1"
+                  required
+                  placeholder="Qty received"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
 
-          <div>
-            <label className="block text-[11px] text-afk-muted mb-1 font-medium">Unit Cost (৳)</label>
-            <input
-              type="number"
-              name="unitCost"
-              step="0.01"
-              min="1"
-              required
-              placeholder="Cost per unit"
-              className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
-            />
-          </div>
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Unit Cost (৳)</label>
+                <input
+                  type="number"
+                  name="unitCost"
+                  step="0.01"
+                  min="0.1"
+                  required
+                  placeholder="Cost per unit"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
 
-          <div>
-            <label className="block text-[11px] text-afk-muted mb-1 font-medium">Payment Account</label>
-            <select
-              name="paymentAccountId"
-              required
-              className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
-            >
-              <option value="">Select Account...</option>
-              {payAccounts.map((pa) => (
-                <option key={pa.id} value={pa.id}>
-                  {pa.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Item Type</label>
+                <select
+                  name="isRawMaterial"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                >
+                  <option value="false">Finished Goods</option>
+                  <option value="true">Raw Material / Fabric</option>
+                </select>
+              </div>
+            </div>
 
-          <div className="flex items-end">
+            <div>
+              <label className="block text-[11px] text-afk-muted mb-1 font-medium">Payment Account</label>
+              <select
+                name="paymentAccountId"
+                required
+                className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+              >
+                <option value="">Select Account...</option>
+                {payAccounts.map((pa) => (
+                  <option key={pa.id} value={pa.id}>
+                    {pa.name} ({pa.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="submit"
-              className="w-full py-1.5 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite text-xs font-semibold rounded transition shadow"
+              className="w-full py-2 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite text-xs font-semibold rounded transition shadow cursor-pointer"
             >
-              Receive Lot & Post GL
+              Receive Lot & Post GL Asset
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
+
+        {/* Create New Product Style Form */}
+        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+          <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Add Catalog Style & SKU Variant</h3>
+          <form action={handleCreateProduct} className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Product / Fabric Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="e.g. Heavyweight Boxy Tee"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Style Code</label>
+                <input
+                  type="text"
+                  name="styleCode"
+                  required
+                  placeholder="e.g. AFK-TS-001"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Category</label>
+                <input
+                  type="text"
+                  name="category"
+                  required
+                  placeholder="e.g. T-Shirts, Hoodies, Fabrics"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Classification</label>
+                <select
+                  name="productType"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                >
+                  <option value="FINISHED_GOODS">Finished Apparel</option>
+                  <option value="RAW_MATERIAL">Raw Material (Fabric/Trim)</option>
+                  <option value="PACKAGING">Packaging & Labels</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Size</label>
+                <input
+                  type="text"
+                  name="size"
+                  required
+                  placeholder="M, L, XL, KG"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Color</label>
+                <input
+                  type="text"
+                  name="color"
+                  required
+                  placeholder="Washed Black"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Retail Price (৳)</label>
+                <input
+                  type="number"
+                  name="sellingPrice"
+                  step="0.01"
+                  placeholder="1450"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-afk-muted mb-1 font-medium">Cost Price (৳)</label>
+                <input
+                  type="number"
+                  name="costPrice"
+                  step="0.01"
+                  placeholder="420"
+                  className="w-full bg-afk-surface border border-afk-border rounded px-3 py-1.5 text-afk-offwhite font-mono focus:outline-none focus:border-afk-olive"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2 bg-afk-surface hover:bg-afk-surfaceLight border border-afk-border text-afk-offwhite text-xs font-semibold rounded transition cursor-pointer"
+            >
+              Create Product Style & SKU
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Active Inventory Lots Table */}

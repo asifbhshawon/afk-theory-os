@@ -7,6 +7,9 @@ export default defineConfig({
     globals: true,
     fileParallelism: false,
     testTimeout: 20000,
+    env: {
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/afk_test_db",
+    },
   },
   resolve: {
     alias: {

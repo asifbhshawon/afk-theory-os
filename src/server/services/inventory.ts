@@ -7,6 +7,7 @@ import {
   locations,
   accounts,
   paymentAccounts,
+  productionOrders,
   auditLogs,
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -151,31 +152,34 @@ export async function receivePurchaseLot(data: {
       notes: `Purchase received: ${data.quantity} units @ ৳${data.unitCost.toFixed(2)}`,
     });
 
-    // 3. Post Balanced Double-Entry Journal:
+    // 3. Post Balanced Double-Entry Journal inside the same atomic transaction:
     // Debit Inventory Asset (+), Credit Cash/Bank (-)
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "PURCHASE",
-      description: `Purchase lot ${data.lotNumber}: ${variant.sku} (${data.quantity} units)`,
-      reference: data.reference || data.lotNumber,
-      sourceModule: "INVENTORY",
-      sourceId: lot.id,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: invGlAcc.id,
-          debit: totalCost,
-          credit: 0,
-          memo: `Inventory asset received: ${variant.sku} (Lot ${data.lotNumber})`,
-        },
-        {
-          accountId: payAcc.glAccountId,
-          debit: 0,
-          credit: totalCost,
-          memo: `Payment from ${payAcc.name}`,
-        },
-      ],
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "PURCHASE",
+        description: `Purchase lot ${data.lotNumber}: ${variant.sku} (${data.quantity} units)`,
+        reference: data.reference || data.lotNumber,
+        sourceModule: "INVENTORY",
+        sourceId: lot.id,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: invGlAcc.id,
+            debit: totalCost,
+            credit: 0,
+            memo: `Inventory asset received: ${variant.sku} (Lot ${data.lotNumber})`,
+          },
+          {
+            accountId: payAcc.glAccountId,
+            debit: 0,
+            credit: totalCost,
+            memo: `Payment from ${payAcc.name}`,
+          },
+        ],
+      },
+      tx
+    );
 
     return lot;
   });
@@ -217,7 +221,34 @@ export async function issueFabricToFactory(data: {
       })
       .where(eq(inventoryLots.id, lot.id));
 
-    // 2. Record Stock Movement from Main WH to Factory WIP
+    // 2. Automatically update production order WIP material cost if linked to an order
+    if (data.productionOrderId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.productionOrderId);
+      const [pOrder] = await tx
+        .select()
+        .from(productionOrders)
+        .where(
+          isUuid
+            ? eq(productionOrders.id, data.productionOrderId)
+            : eq(productionOrders.orderNumber, data.productionOrderId)
+        )
+        .for("update")
+        .limit(1);
+
+      if (pOrder) {
+        const currentMaterialCost = Number(pOrder.totalMaterialCost || 0);
+        const newMaterialCost = Math.round((currentMaterialCost + issueCost) * 100) / 100;
+        await tx
+          .update(productionOrders)
+          .set({
+            totalMaterialCost: newMaterialCost.toFixed(2),
+            status: pOrder.status === "PLANNED" ? "FABRIC_ISSUED" : pOrder.status,
+          })
+          .where(eq(productionOrders.id, pOrder.id));
+      }
+    }
+
+    // 3. Record Stock Movement from Main WH to Factory WIP
     await tx.insert(stockMovements).values({
       variantId: lot.variantId,
       lotId: lot.id,
@@ -232,31 +263,34 @@ export async function issueFabricToFactory(data: {
       notes: data.notes || `Issued ${data.quantity} units of fabric to factory WIP`,
     });
 
-    // 3. Post Accounting Journal:
+    // 4. Post Accounting Journal atomically inside the same transaction:
     // Debit Work In Progress (1220), Credit Materials Inventory (1210)
-    await postJournalEntry({
-      date: new Date(),
-      entryType: "PRODUCTION",
-      description: `Fabric issued to factory WIP: Lot ${lot.lotNumber} (${data.quantity} units)`,
-      reference: data.productionOrderId,
-      sourceModule: "MANUFACTURING",
-      sourceId: data.productionOrderId,
-      userId: data.userId,
-      lines: [
-        {
-          accountId: wipAcc.id,
-          debit: issueCost,
-          credit: 0,
-          memo: `Fabric in production custody at factory WIP`,
-        },
-        {
-          accountId: matAcc.id,
-          debit: 0,
-          credit: issueCost,
-          memo: `Fabric issued from materials inventory`,
-        },
-      ],
-    });
+    await postJournalEntry(
+      {
+        date: new Date(),
+        entryType: "PRODUCTION",
+        description: `Fabric issued to factory WIP: Lot ${lot.lotNumber} (${data.quantity} units)`,
+        reference: data.productionOrderId,
+        sourceModule: "MANUFACTURING",
+        sourceId: data.productionOrderId,
+        userId: data.userId,
+        lines: [
+          {
+            accountId: wipAcc.id,
+            debit: issueCost,
+            credit: 0,
+            memo: `Fabric in production custody at factory WIP`,
+          },
+          {
+            accountId: matAcc.id,
+            debit: 0,
+            credit: issueCost,
+            memo: `Fabric issued from materials inventory`,
+          },
+        ],
+      },
+      tx
+    );
 
     return { success: true, issuedQuantity: data.quantity, remainingInLot: newQty };
   });

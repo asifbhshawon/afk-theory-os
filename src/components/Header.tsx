@@ -1,16 +1,29 @@
-"use client";
+import { getCurrentUser, logoutUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { ShieldCheck, Database, Calendar, LogOut } from "lucide-react";
+import Link from "next/link";
 
-import { usePathname } from "next/navigation";
-import { ShieldCheck, Database, Calendar } from "lucide-react";
+export async function Header() {
+  const user = await getCurrentUser();
 
-export function Header() {
-  const pathname = usePathname();
   const today = new Date().toLocaleDateString("en-BD", {
     weekday: "short",
     year: "numeric",
     month: "short",
     day: "numeric",
   });
+
+  async function handleLogout() {
+    "use server";
+    await logoutUser();
+    redirect("/login");
+  }
+
+  const primaryRole = user?.isAdmin
+    ? "Administrator"
+    : user?.roles[0]?.replace("_", " ") || "Partner";
+
+  const initial = user?.name ? user.name[0].toUpperCase() : "A";
 
   return (
     <header className="h-16 border-b border-afk-border bg-afk-charcoal/80 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-10">
@@ -20,7 +33,7 @@ export function Header() {
         </span>
         <span className="text-afk-border text-sm">/</span>
         <span className="text-sm font-medium text-afk-offwhite capitalize">
-          {pathname === "/" ? "Executive Dashboard" : pathname.replace("/", "").replace("-", " ")}
+          Business OS
         </span>
       </div>
 
@@ -37,16 +50,37 @@ export function Header() {
           <span>PostgreSQL Active</span>
         </div>
 
-        {/* Active Partner User Badge */}
-        <div className="flex items-center gap-2 pl-2 border-l border-afk-border">
-          <div className="w-7 h-7 rounded-full bg-afk-surfaceLight border border-afk-border flex items-center justify-center font-bold text-xs text-afk-offwhite">
-            S
+        {/* Active Partner User Badge & Logout */}
+        {user ? (
+          <div className="flex items-center gap-3 pl-2 border-l border-afk-border">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-afk-olive text-afk-offwhite border border-afk-olive-light flex items-center justify-center font-bold text-xs shadow-sm">
+                {initial}
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-xs font-semibold text-afk-offwhite leading-tight">{user.name}</p>
+                <p className="text-[10px] text-afk-muted leading-tight capitalize">{primaryRole}</p>
+              </div>
+            </div>
+
+            <form action={handleLogout}>
+              <button
+                type="submit"
+                title="Sign out of AFK Business OS"
+                className="p-1.5 text-afk-muted hover:text-red-400 hover:bg-afk-surface rounded border border-afk-border transition cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </form>
           </div>
-          <div className="hidden sm:block">
-            <p className="text-xs font-medium text-afk-offwhite leading-tight">Shawon</p>
-            <p className="text-[10px] text-afk-muted leading-tight">Admin & Partner</p>
-          </div>
-        </div>
+        ) : (
+          <Link
+            href="/login"
+            className="px-3.5 py-1.5 bg-afk-olive hover:bg-afk-olive-light text-afk-offwhite rounded-md text-xs font-semibold transition shadow-sm border border-afk-olive-light flex items-center gap-1.5"
+          >
+            <span>Sign In</span>
+          </Link>
+        )}
       </div>
     </header>
   );

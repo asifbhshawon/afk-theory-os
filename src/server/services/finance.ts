@@ -8,7 +8,7 @@ import {
   fiscalPeriods,
   auditLogs,
 } from "@/db/schema";
-import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lte, inArray } from "drizzle-orm";
 
 export interface CreateJournalLineInput {
   accountId: string;
@@ -30,25 +30,29 @@ export interface CreateJournalEntryInput {
   fiscalPeriodId?: string;
 }
 
-// Generate unique sequential journal entry number
-export async function generateJournalNumber(): Promise<string> {
+// Generate unique sequential journal entry number backed by atomic PostgreSQL sequence (concurrency-safe)
+export async function generateJournalNumber(txClient?: any): Promise<string> {
+  const client = txClient || db;
   const year = new Date().getFullYear();
-  const [result] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(journalEntries);
-
-  const seq = (Number(result?.count || 0) + 1).toString().padStart(4, "0");
-  const rand = Math.floor(Math.random() * 90 + 10);
-  return `AFK-JRN-${year}-${seq}${rand}`;
+  try {
+    const res = await client.execute(sql`SELECT nextval('journal_entry_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-JRN-${year}-${seq}`;
+  } catch {
+    await client.execute(sql`CREATE SEQUENCE IF NOT EXISTS journal_entry_seq START WITH 100001`);
+    const res = await client.execute(sql`SELECT nextval('journal_entry_seq') as seq`);
+    const seq = String(res.rows[0].seq).padStart(6, "0");
+    return `AFK-JRN-${year}-${seq}`;
+  }
 }
 
-// Validate debits == credits and post atomic journal entry
-export async function postJournalEntry(input: CreateJournalEntryInput) {
+// Validate debits == credits and post atomic journal entry, optionally within parent transaction
+export async function postJournalEntry(input: CreateJournalEntryInput, txClient?: any) {
   if (!input.lines || input.lines.length < 2) {
     throw new Error("Journal entry must contain at least two lines.");
   }
 
-  // Calculate totals with 2 decimal precision (paisa)
+  // Calculate totals with 2 decimal precision (exact paisa arithmetic)
   let totalDebit = 0;
   let totalCredit = 0;
 
@@ -67,9 +71,11 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
     throw new Error("Journal total amount must be greater than zero.");
   }
 
+  const client = txClient || db;
+
   // Check if target fiscal period is closed
   const entryDate = input.date;
-  const [closedPeriod] = await db
+  const [closedPeriod] = await client
     .select()
     .from(fiscalPeriods)
     .where(
@@ -89,7 +95,7 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
 
   // Check idempotency reference if provided
   if (input.reference) {
-    const [existing] = await db
+    const [existing] = await client
       .select()
       .from(journalEntries)
       .where(
@@ -108,7 +114,7 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
 
   const entryNumber = await generateJournalNumber();
 
-  return await db.transaction(async (tx) => {
+  const executePost = async (tx: any) => {
     const [entry] = await tx
       .insert(journalEntries)
       .values({
@@ -147,16 +153,26 @@ export async function postJournalEntry(input: CreateJournalEntryInput) {
     }
 
     return entry;
-  });
+  };
+
+  if (txClient) {
+    return await executePost(txClient);
+  } else {
+    return await db.transaction(async (tx) => {
+      return await executePost(tx);
+    });
+  }
 }
 
 // Reverse posted journal entry
 export async function reverseJournalEntry(
   journalEntryId: string,
   reason: string,
-  userId: string
+  userId: string,
+  txClient?: any
 ) {
-  const [original] = await db
+  const client = txClient || db;
+  const [original] = await client
     .select()
     .from(journalEntries)
     .where(eq(journalEntries.id, journalEntryId))
@@ -170,13 +186,13 @@ export async function reverseJournalEntry(
     throw new Error("Journal entry is already reversed.");
   }
 
-  const lines = await db
+  const lines = await client
     .select()
     .from(journalLines)
     .where(eq(journalLines.journalEntryId, original.id));
 
   // Invert debits and credits
-  const reversingLines = lines.map((l) => ({
+  const reversingLines = lines.map((l: any) => ({
     accountId: l.accountId,
     debit: Number(l.credit),
     credit: Number(l.debit),
@@ -186,7 +202,7 @@ export async function reverseJournalEntry(
 
   const reversingNumber = await generateJournalNumber();
 
-  return await db.transaction(async (tx) => {
+  const executeReversal = async (tx: any) => {
     // Mark original as reversed
     await tx
       .update(journalEntries)
@@ -230,7 +246,15 @@ export async function reverseJournalEntry(
     });
 
     return reversal;
-  });
+  };
+
+  if (txClient) {
+    return await executeReversal(txClient);
+  } else {
+    return await db.transaction(async (tx) => {
+      return await executeReversal(tx);
+    });
+  }
 }
 
 // Partner Equity Contribution
@@ -338,9 +362,73 @@ export async function recordPartnerLoan(data: {
   });
 }
 
+// Create Custom Expense Category / Account
+export async function createCustomExpenseCategory(input: {
+  name: string;
+  description?: string;
+  code?: string;
+  userId?: string;
+}) {
+  const trimmedName = input.name.trim();
+  if (!trimmedName) throw new Error("Expense category name is required");
+
+  // Check if account with same name already exists (case-insensitive)
+  const existing = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.group, "EXPENSE"), sql`lower(${accounts.name}) = lower(${trimmedName})`))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  let codeToUse = input.code?.trim();
+  if (!codeToUse) {
+    // Determine next available code in 6000 operating expenses
+    const expAccounts = await db
+      .select({ code: accounts.code })
+      .from(accounts)
+      .where(eq(accounts.group, "EXPENSE"));
+
+    const numericCodes = expAccounts
+      .map((a) => parseInt(a.code, 10))
+      .filter((n) => !isNaN(n) && n >= 6000 && n < 7000);
+
+    const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 6050;
+    codeToUse = String(maxCode + 10);
+  }
+
+  const [newAcc] = await db
+    .insert(accounts)
+    .values({
+      code: codeToUse,
+      name: trimmedName,
+      group: "EXPENSE",
+      normalBalance: "DEBIT",
+      description: input.description || `Custom expense category: ${trimmedName}`,
+      isSystem: false,
+      isActive: true,
+    })
+    .returning();
+
+  if (input.userId) {
+    await db.insert(auditLogs).values({
+      userId: input.userId,
+      action: "CREATE_EXPENSE_ACCOUNT",
+      entityType: "ACCOUNT",
+      entityId: newAcc.id,
+      details: `Created custom expense category ${newAcc.code} - ${newAcc.name}`,
+    });
+  }
+
+  return newAcc;
+}
+
 // Business Expense (from Payment Account or Due to Partner)
 export async function recordBusinessExpense(data: {
-  expenseAccountId: string;
+  expenseAccountId?: string;
+  customCategoryName?: string;
   paymentAccountId?: string;
   partnerId?: string; // If paid personally by partner
   amount: number;
@@ -349,7 +437,22 @@ export async function recordBusinessExpense(data: {
   userId?: string;
   date?: Date;
 }) {
-  const [expenseAcc] = await db.select().from(accounts).where(eq(accounts.id, data.expenseAccountId)).limit(1);
+  let targetExpenseAccountId = data.expenseAccountId;
+
+  // Auto-create or resolve custom category if provided
+  if (data.customCategoryName && data.customCategoryName.trim()) {
+    const customAcc = await createCustomExpenseCategory({
+      name: data.customCategoryName,
+      userId: data.userId,
+    });
+    targetExpenseAccountId = customAcc.id;
+  }
+
+  if (!targetExpenseAccountId || targetExpenseAccountId === "NEW_CUSTOM") {
+    throw new Error("Must select an expense category or provide a custom category name.");
+  }
+
+  const [expenseAcc] = await db.select().from(accounts).where(eq(accounts.id, targetExpenseAccountId)).limit(1);
   if (!expenseAcc) throw new Error("Expense account not found.");
 
   let creditAccountId: string;
@@ -397,6 +500,140 @@ export async function recordBusinessExpense(data: {
   });
 }
 
+// Partner Drawings / Withdrawals
+export async function recordPartnerDrawing(data: {
+  partnerId: string;
+  amount: number;
+  paymentAccountId: string;
+  reference?: string;
+  userId?: string;
+  notes?: string;
+  date?: Date;
+}) {
+  const [partner] = await db.select().from(partners).where(eq(partners.id, data.partnerId)).limit(1);
+  if (!partner) throw new Error("Partner not found.");
+
+  const [payAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.paymentAccountId)).limit(1);
+  if (!payAcc) throw new Error("Payment account not found.");
+
+  const [drawAcc] = await db.select().from(accounts).where(eq(accounts.name, `Partner Drawings - ${partner.name}`)).limit(1);
+  if (!drawAcc) throw new Error(`Drawings account not found for ${partner.name}`);
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "DRAWING",
+    description: `Partner withdrawal / drawings by ${partner.name}`,
+    reference: data.reference,
+    sourceModule: "PARTNERS",
+    sourceId: partner.id,
+    userId: data.userId,
+    lines: [
+      {
+        accountId: drawAcc.id,
+        debit: data.amount,
+        credit: 0,
+        partnerId: partner.id,
+        memo: `Drawings withdrawal by ${partner.name}`,
+      },
+      {
+        accountId: payAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Disbursed from ${payAcc.name}`,
+      },
+    ],
+  });
+}
+
+// Partner Reimbursement / Loan Repayment
+export async function recordPartnerReimbursement(data: {
+  partnerId: string;
+  amount: number;
+  paymentAccountId: string;
+  reference?: string;
+  userId?: string;
+  notes?: string;
+  date?: Date;
+}) {
+  const [partner] = await db.select().from(partners).where(eq(partners.id, data.partnerId)).limit(1);
+  if (!partner) throw new Error("Partner not found.");
+
+  const [payAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.paymentAccountId)).limit(1);
+  if (!payAcc) throw new Error("Payment account not found.");
+
+  const [dueAcc] = await db.select().from(accounts).where(eq(accounts.name, `Due to ${partner.name}`)).limit(1);
+  if (!dueAcc) throw new Error(`Due to account not found for ${partner.name}`);
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "PARTNER_REIMBURSEMENT",
+    description: `Loan reimbursement / repayment to partner ${partner.name}`,
+    reference: data.reference,
+    sourceModule: "PARTNERS",
+    sourceId: partner.id,
+    userId: data.userId,
+    lines: [
+      {
+        accountId: dueAcc.id,
+        debit: data.amount,
+        credit: 0,
+        partnerId: partner.id,
+        memo: `Repayment of advance due to ${partner.name}`,
+      },
+      {
+        accountId: payAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Disbursed from ${payAcc.name}`,
+      },
+    ],
+  });
+}
+
+// Transfer funds between cash, bank, bKash, and Nagad payment accounts
+export async function transferFunds(data: {
+  fromPaymentAccountId: string;
+  toPaymentAccountId: string;
+  amount: number;
+  reference?: string;
+  userId?: string;
+  date?: Date;
+}) {
+  if (data.fromPaymentAccountId === data.toPaymentAccountId) {
+    throw new Error("Source and destination accounts must be different.");
+  }
+
+  const [fromAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.fromPaymentAccountId)).limit(1);
+  const [toAcc] = await db.select().from(paymentAccounts).where(eq(paymentAccounts.id, data.toPaymentAccountId)).limit(1);
+
+  if (!fromAcc || !toAcc) {
+    throw new Error("Source or destination payment account not found.");
+  }
+
+  return await postJournalEntry({
+    date: data.date || new Date(),
+    entryType: "TRANSFER",
+    description: `Transfer ৳${data.amount.toFixed(2)} from ${fromAcc.name} to ${toAcc.name}`,
+    reference: data.reference,
+    sourceModule: "FINANCE",
+    userId: data.userId,
+    lines: [
+      {
+        accountId: toAcc.glAccountId,
+        debit: data.amount,
+        credit: 0,
+        memo: `Transfer deposit to ${toAcc.name}`,
+      },
+      {
+        accountId: fromAcc.glAccountId,
+        debit: 0,
+        credit: data.amount,
+        memo: `Transfer withdrawal from ${fromAcc.name}`,
+      },
+    ],
+  });
+}
+
 // Financial Statements Generation derived directly from posted journal lines
 export async function getFinancialStatements(asOfDate: Date = new Date()) {
   const allAccounts = await db.select().from(accounts);
@@ -413,7 +650,7 @@ export async function getFinancialStatements(asOfDate: Date = new Date()) {
     .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
     .where(
       and(
-        eq(journalEntries.status, "POSTED"),
+        inArray(journalEntries.status, ["POSTED", "REVERSED"]),
         lte(journalEntries.date, asOfDate)
       )
     )

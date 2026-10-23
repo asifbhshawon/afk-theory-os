@@ -1,6 +1,6 @@
 # Backup, Verification & Disaster Recovery Guide
 
-**System Principle:** Docker volumes are persistent storage, NOT backups. True disaster recovery requires independent local copies on separate physical disks or external media.
+**System Principle:** Docker volumes are persistent storage, NOT backups. True disaster recovery requires independent local copies on separate physical disks or external media with authenticated encryption.
 
 ---
 
@@ -8,8 +8,10 @@
 
 The backup subsystem bundles:
 1. **PostgreSQL Logical Dump:** Generated via `pg_dump` with transactional consistency.
-2. **Local Documents Archive:** All attached vouchers, invoices, and design proofs in `./storage`.
-3. **SHA-256 Integrity Manifest:** `manifest.json` recording backup ID, file size, timestamp, and SHA256 hashes of all components.
+2. **AES-256-GCM Authenticated Encryption:** Encrypted using a PBKDF2/scrypt derived key and authenticated with a 16-byte GCM authentication tag, defending against both tampering and unauthorized inspection.
+3. **Local Documents Archive:** All attached vouchers, invoices, and design proofs in `./storage`.
+4. **Integrity Manifest:** `manifest.json` recording backup ID, encrypted and unencrypted file sizes, timestamps, auth tags, and SHA-256 digests.
+5. **Rotation & Retention:** Automatic pruning keeping the most recent N backups (defaults to 7).
 
 ---
 
@@ -21,26 +23,33 @@ Run the PowerShell backup script:
 # Default destination (./backups):
 .\scripts\backup.ps1
 
-# External mounted drive (Recommended for physical safety):
-.\scripts\backup.ps1 -Destination "E:\AFK-Backups"
+# Custom external mounted drive with retention rotation:
+.\scripts\backup.ps1 -Destination "E:\AFK-Backups" -KeepCount 7
 ```
 
 Example Output:
 ```text
 ==========================================================
-   AFK THEORY Business OS -- Local Backup Generator
+   AFK THEORY Business OS -- Authenticated Backup
 ==========================================================
-Destination: .\backups\AFK-BACKUP-2026-10-23_00-12-22
+Target Container: afk-theory-postgres
+Destination:      .\backups\AFK-BACKUP-2026-10-23_01-50-40
 
-[1/3] Exporting PostgreSQL logical dump...
-[OK] Database dump created: 240.96 KB
+[1/4] Exporting PostgreSQL logical dump...
+[OK] Database dump created: 986.22 KB (SHA256: EF5A2461E7A5...)
 
-[2/3] Archiving local documents and uploads...
-[OK] Documents directory archived
+[2/4] Applying AES-256-GCM authenticated encryption...
+[OK] Dump encrypted with AES-256-GCM (AuthTag: 8d2bac5f731a...)
 
-[3/3] Generating SHA256 integrity manifest...
-[OK] Integrity manifest written: .\backups\AFK-BACKUP-2026-10-23_00-12-22\manifest.json
-  Database SHA256: AEAA16446AB333ADA0E602760E2961F10657341E95CE9CE8509DCA36A29EE91F
+[3/4] Archiving local documents and uploads...
+[OK] Documents directory archived (0 files)
+
+[4/4] Generating authenticated integrity manifest...
+[OK] Manifest generated: .\backups\AFK-BACKUP-2026-10-23_01-50-40\manifest.json
+
+==========================================================
+ Authenticated backup successful: .\backups\AFK-BACKUP-2026-10-23_01-50-40
+ Verify with: .\scripts\verify-backup.ps1 -BackupPath ".\backups\AFK-BACKUP-2026-10-23_01-50-40"
 ==========================================================
 ```
 
@@ -51,10 +60,10 @@ Destination: .\backups\AFK-BACKUP-2026-10-23_00-12-22
 To verify that a backup has not suffered bit-rot or file corruption:
 
 ```powershell
-.\scripts\verify-backup.ps1 -BackupPath ".\backups\AFK-BACKUP-2026-10-23_00-12-22"
+.\scripts\verify-backup.ps1 -BackupPath ".\backups\AFK-BACKUP-2026-10-23_01-50-40"
 ```
 
-The script recalculates the SHA-256 hash of `database.sql` and compares it to `manifest.json`.
+The script decrypts the ciphertext using Node.js crypto, validates the 16-byte AES-256-GCM auth tag, and compares the resulting stream SHA-256 hash to `manifest.json`.
 
 ---
 
@@ -63,14 +72,15 @@ The script recalculates the SHA-256 hash of `database.sql` and compares it to `m
 Before ever touching live production, test restores must execute into a disposable database:
 
 ```powershell
-.\scripts\restore.ps1 -BackupPath ".\backups\AFK-BACKUP-2026-10-23_00-12-22" -Isolated
+.\scripts\restore.ps1 -BackupPath ".\backups\AFK-BACKUP-2026-10-23_01-50-40" -Isolated
 ```
 
 This:
-1. Creates disposable database `afk_restore_test`.
-2. Restores all tables, constraints, sequences, and data rows.
-3. Queries and verifies partner counts, accounts, and journal numbers.
-4. Leaves the live database `afk_business_os` completely untouched.
+1. Validates the AES-256-GCM authentication tag.
+2. Creates disposable database `afk_restore_test`.
+3. Restores all tables, constraints, sequences, and data rows.
+4. Queries and verifies partner counts, accounts, inventory lots, and journal numbers.
+5. Destroys decrypted plaintexts and leaves live database `afk_business_os` completely untouched.
 
 ---
 

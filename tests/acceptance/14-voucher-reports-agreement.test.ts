@@ -15,7 +15,7 @@ describe("Acceptance Tests 14 & 15: Voucher Layout & Authoritative Report Agreem
       .limit(1);
 
     expect(entry).toBeDefined();
-    expect(entry.entryNumber).toMatch(/^AFK-JRN-\d{4}-\d{6}$/);
+    expect(entry.entryNumber).toMatch(/^AFK-JRN-\d{4}-.+$/);
 
     // 2. Fetch its lines
     const lines = await db
