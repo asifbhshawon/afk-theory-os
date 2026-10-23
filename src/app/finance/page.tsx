@@ -9,7 +9,9 @@ import {
   createCustomExpenseCategory,
 } from "@/server/services/finance";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireRole, getCurrentUser } from "@/lib/auth";
+import { listDocuments } from "@/server/services/evidence";
+import { FinanceEvidenceSection } from "@/components/evidence/FinanceEvidenceSection";
 import Link from "next/link";
 import { Printer, RotateCcw, ArrowRightLeft, PlusCircle, Tag, Sparkles } from "lucide-react";
 
@@ -22,6 +24,8 @@ export default async function FinancePage() {
   const allPartners = await db.select().from(partners).where(eq(partners.status, "ACTIVE"));
 
   const expenseAccounts = allAccounts.filter((a) => a.group === "EXPENSE");
+  const currentUser = await getCurrentUser();
+  const financeDocs = await listDocuments({ module: "FINANCE", limit: 30 });
 
   const entriesWithLines = await db
     .select({
@@ -449,6 +453,12 @@ export default async function FinancePage() {
           ))}
         </div>
       </div>
+
+      {/* Attached Evidence & Receipts */}
+      <FinanceEvidenceSection
+        initialDocuments={financeDocs.items}
+        canVerify={currentUser?.isAdmin || currentUser?.roles?.includes("FINANCE_MGR")}
+      />
 
       {/* Posted Journal Entries Table */}
       <div className="bg-afk-charcoal rounded-lg border border-afk-border p-5">

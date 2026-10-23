@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  FileText,
   Wallet,
   Users,
   Package,
@@ -54,6 +55,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "MANAGEMENT",
     items: [
+      { href: "/documents", label: "Evidence & Documents", icon: FileText, badge: "WEBP", badgeColor: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
       { href: "/settings", label: "System & Backups", icon: Settings },
       { href: "/studio", label: "Customisation Studio", icon: CircleDot },
     ],

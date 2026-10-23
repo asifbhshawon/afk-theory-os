@@ -3,6 +3,7 @@ import { journalEntries, journalLines, accounts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/PrintButton";
+import { getEvidenceForEntity } from "@/server/services/evidence";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,9 @@ export default async function PrintableVoucherPage({
 
   const totalDebit = lines.reduce((s, l) => s + Number(l.debit), 0);
   const totalCredit = lines.reduce((s, l) => s + Number(l.credit), 0);
+
+  // Fetch attached evidence documents
+  const attachedEvidence = await getEvidenceForEntity("JOURNAL_ENTRY", id);
 
   return (
     <div className="bg-white text-black min-h-screen p-8 max-w-4xl mx-auto font-sans">
@@ -112,8 +116,59 @@ export default async function PrintableVoucherPage({
         </tbody>
       </table>
 
+      {/* Supporting Evidence & Verification Appendix */}
+      <div className="mb-8 p-3 rounded border border-gray-300 bg-gray-50 text-xs">
+        <div className="flex items-center justify-between border-b border-gray-300 pb-2 mb-2 font-bold">
+          <span className="uppercase tracking-wider">Supporting Proof & Evidence Appendix</span>
+          <span className="font-mono text-[11px] bg-black text-white px-2 py-0.5 rounded">
+            Attachments: {attachedEvidence.length}
+          </span>
+        </div>
+
+        {attachedEvidence.length > 0 ? (
+          <div className="space-y-2">
+            {attachedEvidence.map((ev) => (
+              <div
+                key={ev.id}
+                className="flex items-center justify-between text-[11px] border-b border-gray-200 pb-1.5 last:border-0 last:pb-0"
+              >
+                <div>
+                  <span className="font-semibold">{ev.displayTitle || ev.originalName}</span>
+                  <span className="text-gray-500 font-mono ml-2">[{ev.category}]</span>
+                  <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                    SHA256: {ev.fileHash.substring(0, 16)}... · {(ev.fileSizeBytes / 1024).toFixed(0)} KB WebP
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span
+                    className={`font-bold px-1.5 py-0.5 rounded text-[10px] uppercase font-mono ${
+                      ev.verificationStatus === "VERIFIED"
+                        ? "bg-green-100 text-green-800"
+                        : ev.verificationStatus === "REJECTED"
+                        ? "bg-red-100 text-red-800"
+                        : "bg-yellow-100 text-yellow-800"
+                    }`}
+                  >
+                    {ev.verificationStatus}
+                  </span>
+                  {ev.verifiedAt && (
+                    <span className="block text-[9px] text-gray-500 mt-0.5">
+                      {new Date(ev.verifiedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 italic text-[11px]">
+            No electronic evidence documents attached to this transaction voucher.
+          </p>
+        )}
+      </div>
+
       {/* Signatures & Approvals Block */}
-      <div className="grid grid-cols-3 gap-6 pt-16 border-t border-gray-300 mt-12 text-center text-xs">
+      <div className="grid grid-cols-3 gap-6 pt-12 border-t border-gray-300 text-center text-xs">
         <div>
           <div className="border-b border-black pb-1 mb-1 font-semibold">Shawon</div>
           <p className="text-gray-500">Prepared By</p>

@@ -15,6 +15,13 @@
       "when": 1792733280844,
       "tag": "0001_sturdy_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792738782443,
+      "tag": "0002_massive_paibok",
+      "breakpoints": true
     }
   ]
 }

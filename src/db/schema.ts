@@ -691,19 +691,65 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const documents = pgTable("documents", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  filename: text("filename").notNull(),
-  originalName: text("original_name").notNull(),
-  mimeType: text("mime_type").notNull(),
-  fileSizeBytes: integer("file_size_bytes").notNull(),
-  storagePath: text("storage_path").notNull(), // relative to STORAGE_DIR
-  fileHash: text("file_hash").notNull(), // SHA256 checksum
-  module: text("module").notNull(), // VOUCHER, INVOICE, CONTRACT, DESIGN, RECEIPT
-  referenceId: text("reference_id"),
-  uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    filename: text("filename").notNull(),
+    originalName: text("original_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    originalMimeType: text("original_mime_type"),
+    fileSizeBytes: integer("file_size_bytes").notNull(),
+    originalSizeBytes: integer("original_size_bytes"),
+    storagePath: text("storage_path").notNull(), // relative to STORAGE_DIR (e.g. uploads/evidence/abc.webp)
+    thumbnailPath: text("thumbnail_path"), // relative to STORAGE_DIR (e.g. uploads/thumbnails/thumb_abc.webp)
+    fileHash: text("file_hash").notNull(), // SHA256 checksum
+    width: integer("width"),
+    height: integer("height"),
+    module: text("module").notNull(), // FINANCE, VENTURES, INVENTORY, MANUFACTURING, SALES, GENERAL
+    referenceId: text("reference_id"),
+    entityType: text("entity_type"), // EXPENSE, VENTURE, PRODUCTION_ORDER, SALES_ORDER, etc.
+    entityId: text("entity_id"),
+    displayTitle: text("display_title"),
+    category: text("category").notNull().default("GENERAL_EVIDENCE"), // PAYMENT_PROOF, RECEIPT, INVOICE, DELIVERY_PROOF, QC_DEFECT, AGREEMENT, SAMPLE_PHOTO, GENERAL_EVIDENCE
+    description: text("description"),
+    verificationStatus: text("verification_status").notNull().default("PENDING"), // PENDING, VERIFIED, REJECTED, SUPERSEDED
+    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verificationNotes: text("verification_notes"),
+    isArchived: boolean("is_archived").notNull().default(false),
+    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("docs_module_idx").on(table.module),
+    index("docs_entity_idx").on(table.entityType, table.entityId),
+    index("docs_verification_idx").on(table.verificationStatus),
+    index("docs_category_idx").on(table.category),
+    index("docs_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const documentLinks = pgTable(
+  "document_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(), // EXPENSE, VENTURE, PRODUCTION_ORDER, SALES_ORDER, etc.
+    entityId: text("entity_id").notNull(),
+    linkType: text("link_type").notNull().default("PRIMARY"), // PRIMARY, SUPPORTING, REFERENCE
+    notes: text("notes"),
+    linkedByUserId: uuid("linked_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("doc_links_entity_idx").on(table.entityType, table.entityId),
+    index("doc_links_doc_idx").on(table.documentId),
+  ]
+);
 
 export const settings = pgTable("settings", {
   id: uuid("id").defaultRandom().primaryKey(),

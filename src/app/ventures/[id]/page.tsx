@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { paymentAccounts, partners, accounts } from "@/db/schema";
 import {
@@ -26,6 +27,7 @@ import {
   getEntityCustomFieldValues,
   saveEntityCustomFieldValues,
 } from "@/server/services/custom-fields";
+import { getEvidenceForEntity } from "@/server/services/evidence";
 import { getCurrentUser, requireRole } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -55,11 +57,12 @@ export default async function VentureDetailPage({
   const customFieldVals = await getEntityCustomFieldValues(id);
   const allPaymentAccounts = await db.select().from(paymentAccounts);
   const allPartners = await db.select().from(partners).orderBy(partners.name);
+  const evidenceList = await getEvidenceForEntity("VENTURE", id);
 
   // Server Action: Transition Stage
   async function handleTransitionStage(newStage: string, notes?: string) {
     "use server";
-    const authUser = await requireRole(["ADMIN", "FINANCE_APPROVER", "FINANCE_MGR"]);
+    const authUser = await requireRole(["ADMIN", "FINANCE_MGR", "PARTNER"]);
     await transitionVentureStage(id, newStage as VentureStage, authUser, notes);
     revalidatePath(`/ventures/${id}`);
     revalidatePath("/ventures");
@@ -68,34 +71,30 @@ export default async function VentureDetailPage({
   // Server Action: Approve Agreement
   async function handleApproveAgreement(agreementId: string) {
     "use server";
-    const authUser = await requireRole(["ADMIN", "FINANCE_APPROVER"]);
+    const authUser = await requireRole(["ADMIN", "PARTNER", "FINANCE_APPROVER"]);
     await approveAgreement(agreementId, authUser);
     revalidatePath(`/ventures/${id}`);
+    revalidatePath("/ventures");
   }
 
   // Server Action: Record Contribution
   async function handleRecordContribution(data: {
-    participantId?: string;
-    partnerId?: string;
-    contributionType: ContributionType;
+    participantId: string;
     amount: number;
+    contributionType: ContributionType;
     paymentAccountId?: string;
-    description: string;
-    isRecordedInLedger?: boolean;
-    date?: string;
+    description?: string;
+    postLedger?: boolean;
   }) {
     "use server";
-    const authUser = await requireRole(["ADMIN", "FINANCE_MGR"]);
+    const authUser = await requireRole(["ADMIN", "FINANCE_MGR", "PARTNER"]);
     await recordContribution({
       ventureId: id,
       participantId: data.participantId,
-      partnerId: data.partnerId,
-      contributionType: data.contributionType,
       amount: data.amount,
+      contributionType: data.contributionType,
       paymentAccountId: data.paymentAccountId,
-      description: data.description,
-      isRecordedInLedger: data.isRecordedInLedger,
-      date: data.date,
+      description: data.description || "Capital contribution",
       userId: authUser.id,
     });
     revalidatePath(`/ventures/${id}`);
@@ -104,14 +103,16 @@ export default async function VentureDetailPage({
 
   // Server Action: Create Settlement Snapshot
   async function handleCreateSettlement(data: {
-    customNetProfit?: number;
+    periodStart: string;
+    periodEnd: string;
+    netProfitOverride?: number;
     settlementType?: "FULL" | "PARTIAL" | "REINVESTMENT" | "LOSS_CARRYFORWARD";
     notes?: string;
   }) {
     "use server";
     const authUser = await requireRole(["ADMIN", "FINANCE_MGR"]);
     await createSettlementSnapshot(id, {
-      customNetProfit: data.customNetProfit,
+      customNetProfit: data.netProfitOverride,
       settlementType: data.settlementType,
       notes: data.notes,
       userId: authUser.id,
@@ -122,7 +123,7 @@ export default async function VentureDetailPage({
   // Server Action: Approve Settlement
   async function handleApproveSettlement(settlementId: string) {
     "use server";
-    const authUser = await requireRole(["ADMIN", "FINANCE_APPROVER"]);
+    const authUser = await requireRole(["ADMIN", "PARTNER", "FINANCE_APPROVER"]);
     await approveSettlement(settlementId, authUser);
     revalidatePath(`/ventures/${id}`);
   }
@@ -131,14 +132,12 @@ export default async function VentureDetailPage({
   async function handleDisburseSettlement(data: {
     settlementId: string;
     paymentAccountId: string;
-    notes?: string;
   }) {
     "use server";
     const authUser = await requireRole(["ADMIN", "FINANCE_MGR"]);
     await disburseSettlement(data.settlementId, {
       paymentAccountId: data.paymentAccountId,
       user: authUser,
-      notes: data.notes,
     });
     revalidatePath(`/ventures/${id}`);
     revalidatePath("/finance");
@@ -164,6 +163,7 @@ export default async function VentureDetailPage({
       paymentAccounts={allPaymentAccounts}
       partners={allPartners}
       currentUser={user}
+      evidenceList={evidenceList}
       onTransitionStage={handleTransitionStage}
       onApproveAgreement={handleApproveAgreement}
       onRecordContribution={handleRecordContribution}

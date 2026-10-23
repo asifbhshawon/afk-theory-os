@@ -104,20 +104,29 @@ export async function createLocalBackup(
     // Securely delete plaintext dump after encryption
     fs.unlinkSync(rawDumpPath);
 
-    // 3. Copy storage directory documents if present
+    // 3. Copy storage directory documents and evidence recursively if present
     const backupDocsDir = path.join(backupFolder, "documents");
     fs.mkdirSync(backupDocsDir, { recursive: true });
     let docCount = 0;
 
-    if (fs.existsSync(storageDir)) {
-      const files = fs.readdirSync(storageDir);
-      for (const f of files) {
-        const src = path.join(storageDir, f);
-        if (fs.statSync(src).isFile()) {
-          fs.copyFileSync(src, path.join(backupDocsDir, f));
+    function copyDirRecursive(src: string, dest: string) {
+      if (!fs.existsSync(src)) return;
+      fs.mkdirSync(dest, { recursive: true });
+      const entries = fs.readdirSync(src, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          copyDirRecursive(srcPath, destPath);
+        } else if (entry.isFile()) {
+          fs.copyFileSync(srcPath, destPath);
           docCount++;
         }
       }
+    }
+
+    if (fs.existsSync(storageDir)) {
+      copyDirRecursive(storageDir, backupDocsDir);
     }
 
     // 4. Create manifest with SHA256 and authenticated encryption metadata

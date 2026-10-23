@@ -23,6 +23,9 @@ import {
   Percent,
 } from "lucide-react";
 import { ContributionType } from "@/server/services/funding";
+import { EvidenceGallery } from "@/components/evidence/EvidenceGallery";
+import { EvidenceUploader } from "@/components/evidence/EvidenceUploader";
+import { Paperclip } from "lucide-react";
 
 interface Props {
   venture: any;
@@ -35,6 +38,7 @@ interface Props {
   paymentAccounts: any[];
   partners: any[];
   currentUser: any;
+  evidenceList?: any[];
   onTransitionStage: (newStage: string, notes?: string) => Promise<void>;
   onApproveAgreement: (agreementId: string) => Promise<void>;
   onRecordContribution: (data: any) => Promise<void>;
@@ -55,6 +59,7 @@ export function VentureWorkspaceClient({
   paymentAccounts,
   partners,
   currentUser,
+  evidenceList = [],
   onTransitionStage,
   onApproveAgreement,
   onRecordContribution,
@@ -63,7 +68,8 @@ export function VentureWorkspaceClient({
   onDisburseSettlement,
   onSaveCustomFields,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "agreement" | "funding" | "waterfall" | "custom_fields">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "agreement" | "funding" | "waterfall" | "custom_fields" | "evidence">("overview");
+  const [evidence, setEvidence] = useState<any[]>(evidenceList);
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -319,6 +325,7 @@ export function VentureWorkspaceClient({
           { id: "funding", label: "Funding Ledger", icon: Coins },
           { id: "waterfall", label: "Waterfall & Settlements", icon: PieChart },
           { id: "custom_fields", label: "Custom Attributes", icon: Sliders },
+          { id: "evidence", label: "Attached Proof & Contracts", icon: Paperclip },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
