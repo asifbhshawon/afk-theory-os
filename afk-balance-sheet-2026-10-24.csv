@@ -1,0 +1,37 @@
+﻿AFK THEORY - BALANCE SHEET (FINANCIAL POSITION),As of 2026-10-24,Currency: BDT
+,,
+Classification,Account Code & Name,Balance (BDT)
+ASSETS,,
+Asset,1010 - Cash on Hand,6000
+Asset,1020 - Bank Account (Primary),68
+Asset,1030 - bKash Merchant Wallet,0
+Asset,1040 - Nagad Merchant Wallet,0
+Asset,1110 - Customer Receivables,0
+Asset,1120 - Courier Receivables (COD),0
+Asset,1130 - Supplier Advances,0
+Asset,1210 - Materials Inventory,0
+Asset,1220 - Work in Progress (WIP),0
+Asset,1230 - Finished Goods Inventory,0
+Asset,1240 - Inventory in Transit,0
+TOTAL ASSETS,,6068
+,,
+LIABILITIES,,
+Liability,2010 - Trade Payables,0
+Liability,2020 - Tax / VAT Payable,0
+Liability,2110 - Due to Shawon,0
+Liability,2120 - Due to Rafi,0
+Liability,2130 - Due to Tousif,0
+Liability,2140 - Due to Midhat,0
+Liability,2150 - Due to Mueid,0
+TOTAL LIABILITIES,,0
+,,
+PARTNER EQUITY,,
+Capital,Partner Capital - Shawon,10450
+Capital,Partner Capital - Rafi,20000
+Capital,Partner Capital - Tousif,20000
+Capital,Partner Capital - Midhat,10000
+Capital,Partner Capital - Mueid,11000
+Retained Earnings,Current Period Net Earnings,-65382
+TOTAL EQUITY,,6068
+TOTAL LIABILITIES & EQUITY,,6068
+BALANCE STATUS,BALANCED,
