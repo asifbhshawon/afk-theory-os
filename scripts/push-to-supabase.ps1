@@ -27,18 +27,28 @@ Write-Host "Target Local Container: $container" -ForegroundColor Yellow
 
 $tempDumpFile = Join-Path $PSScriptRoot "temp-supabase-dump.sql"
 
-# 2. Export clean database dump without role/privilege locks
+# 2. Export clean database dump without role/privilege locks (guaranteeing pure UTF-8 without Windows UTF-16 BOM)
 Write-Host "`n[1/3] Exporting clean logical dump from local PostgreSQL..." -ForegroundColor Yellow
 
-docker exec $container pg_dump -U postgres --clean --if-exists --no-owner --no-privileges afk_business_os > "$tempDumpFile"
+$containerDumpPath = "/tmp/supabase-dump.sql"
+docker exec $container pg_dump -U postgres --clean --if-exists --no-owner --no-privileges -f $containerDumpPath afk_business_os
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to export logical dump inside container $container."
+    exit 1
+}
+
+# Copy raw UTF-8 binary dump directly to avoid PowerShell redirection encoding issues
+docker cp "${container}:${containerDumpPath}" "$tempDumpFile"
+docker exec $container rm -f $containerDumpPath
 
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tempDumpFile)) {
-    Write-Error "Failed to export logical dump from container $container."
+    Write-Error "Failed to copy logical dump from container $container."
     exit 1
 }
 
 $dumpSize = (Get-Item $tempDumpFile).Length
-Write-Host "[OK] Clean dump generated: $([math]::Round($dumpSize / 1KB, 2)) KB" -ForegroundColor Green
+Write-Host "[OK] Clean UTF-8 dump generated: $([math]::Round($dumpSize / 1KB, 2)) KB" -ForegroundColor Green
 
 # 3. Push dump to Supabase using Docker PostgreSQL client (zero local psql dependency)
 Write-Host "`n[2/3] Streaming database schema and records to Supabase..." -ForegroundColor Yellow
@@ -55,7 +65,7 @@ if ($LASTEXITCODE -ne 0) {
 # 4. Verify Supabase tables
 Write-Host "`n[3/3] Verifying migrated tables in Supabase..." -ForegroundColor Yellow
 
-$verifyQuery = "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"
+$verifyQuery = "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';"
 docker run --rm postgres:16-alpine psql "$SupabaseUrl" -t -c "$verifyQuery"
 
 # Cleanup temporary dump file
