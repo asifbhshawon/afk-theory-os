@@ -9,6 +9,8 @@ const { Pool } = pg;
 
 const connectionString =
   process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
   "postgresql://postgres:postgres@localhost:5432/afk_business_os";
 
 // Detect if running in a serverless environment (e.g. Vercel)
