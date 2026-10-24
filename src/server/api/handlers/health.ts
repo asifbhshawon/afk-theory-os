@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
-export async function GET() {
+export async function handleHealthGet() {
   try {
     const res = await db.execute(sql`SELECT 1 as healthy, current_database() as db_name`);
     const result = res.rows[0] as { healthy: number; db_name: string } | undefined;

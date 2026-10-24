@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createLocalBackup } from "@/server/services/backup";
 import { getCurrentUser } from "@/lib/auth";
 
-export async function POST() {
+export async function handleBackupPost() {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -28,3 +28,6 @@ export async function POST() {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+// Alias for direct test invocation
+export const POST = handleBackupPost;

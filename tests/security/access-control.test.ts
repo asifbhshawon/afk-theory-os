@@ -8,7 +8,7 @@ import {
   hasRole,
   changePassword,
 } from "@/lib/auth";
-import { POST as backupApiPost } from "@/app/api/backup/route";
+import { handleBackupPost as backupApiPost } from "@/server/api/handlers/backup";
 
 describe("Negative Security & RBAC Access Control Tests", () => {
   it("rejects unauthenticated calls when no session is present", async () => {
