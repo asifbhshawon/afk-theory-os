@@ -2,6 +2,7 @@ import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { pool } from "@/db";
 
 export interface BackupResult {
   backupId: string;
@@ -60,6 +61,56 @@ export function decryptBuffer(encrypted: Buffer, password: string, saltHex: stri
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
+// Pure Node.js database fallback if pg_dump and docker are unavailable
+async function exportDatabaseNodeFallback(outputPath: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    const tableRes = await client.query(`
+      SELECT table_schema, table_name 
+      FROM information_schema.tables 
+      WHERE table_schema IN ('public', 'drizzle') AND table_type = 'BASE TABLE'
+      ORDER BY table_schema, table_name
+    `);
+
+    let sql = "-- ==========================================================\n";
+    sql += "-- AFK THEORY BUSINESS OS Logical Backup (Node DB Fallback)\n";
+    sql += `-- Generated: ${new Date().toISOString()}\n`;
+    sql += "-- ==========================================================\n\n";
+
+    for (const row of tableRes.rows) {
+      const { table_schema, table_name } = row;
+      const fullTableName = `"${table_schema}"."${table_name}"`;
+
+      const rowsRes = await client.query(`SELECT * FROM ${fullTableName}`);
+      if (rowsRes.rows.length === 0) continue;
+
+      sql += `-- Table: ${fullTableName} (${rowsRes.rows.length} rows)\n`;
+      const cols = Object.keys(rowsRes.rows[0]);
+      const colList = cols.map((c) => `"${c}"`).join(", ");
+
+      for (const r of rowsRes.rows) {
+        const valList = cols
+          .map((c) => {
+            const v = r[c];
+            if (v === null || v === undefined) return "NULL";
+            if (typeof v === "number" || typeof v === "boolean") return String(v);
+            if (Buffer.isBuffer(v)) return `'\\x${v.toString("hex")}'`;
+            if (v instanceof Date) return `'${v.toISOString()}'`;
+            if (typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+            return `'${String(v).replace(/'/g, "''")}'`;
+          })
+          .join(", ");
+        sql += `INSERT INTO ${fullTableName} (${colList}) VALUES (${valList}) ON CONFLICT DO NOTHING;\n`;
+      }
+      sql += "\n";
+    }
+
+    fs.writeFileSync(outputPath, sql, "utf8");
+  } finally {
+    client.release();
+  }
+}
+
 // Generate full logical backup of PostgreSQL database + documents + authenticated encryption
 export async function createLocalBackup(
   destinationDir?: string,
@@ -78,20 +129,97 @@ export async function createLocalBackup(
   const rawDumpPath = path.join(backupFolder, "database.sql");
   const encDumpPath = path.join(backupFolder, "database.sql.enc");
   const container = getPostgresContainer();
+  const dbUrl =
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/afk_business_os";
+
+  let parsedHost = "localhost";
+  let parsedPort = "5432";
+  let parsedUser = "postgres";
+  let parsedPassword = "";
+  let parsedDb = "afk_business_os";
+
+  try {
+    const url = new URL(dbUrl);
+    parsedHost = url.hostname || "localhost";
+    parsedPort = url.port || "5432";
+    parsedUser = decodeURIComponent(url.username || "postgres");
+    parsedPassword = decodeURIComponent(url.password || "");
+    parsedDb = url.pathname.replace(/^\//, "") || "afk_business_os";
+  } catch {
+    // Keep defaults
+  }
 
   try {
     // 1. Export PostgreSQL schema + data
+    let dumpSuccess = false;
+    const dumpErrors: string[] = [];
+
+    // Strategy 1: Direct pg_dump with connection flags or URI
     try {
       execSync(
-        `docker exec ${container} pg_dump -U postgres afk_business_os > "${rawDumpPath}"`,
-        { stdio: "pipe", timeout: 45000 }
+        `pg_dump -h "${parsedHost}" -p "${parsedPort}" -U "${parsedUser}" -d "${parsedDb}" -f "${rawDumpPath}"`,
+        {
+          stdio: "pipe",
+          timeout: 60000,
+          env: {
+            ...process.env,
+            PGPASSWORD: parsedPassword,
+          },
+        }
       );
-    } catch {
-      // Fallback: run local pg_dump directly
-      execSync(`pg_dump -U postgres afk_business_os > "${rawDumpPath}"`, {
-        stdio: "pipe",
-        timeout: 45000,
-      });
+      if (fs.existsSync(rawDumpPath) && fs.statSync(rawDumpPath).size > 0) {
+        dumpSuccess = true;
+      }
+    } catch (e1: any) {
+      dumpErrors.push(`pg_dump flags: ${e1.message}`);
+      try {
+        execSync(`pg_dump -d "${dbUrl}" -f "${rawDumpPath}"`, {
+          stdio: "pipe",
+          timeout: 60000,
+          env: {
+            ...process.env,
+            PGPASSWORD: parsedPassword,
+          },
+        });
+        if (fs.existsSync(rawDumpPath) && fs.statSync(rawDumpPath).size > 0) {
+          dumpSuccess = true;
+        }
+      } catch (e2: any) {
+        dumpErrors.push(`pg_dump URI: ${e2.message}`);
+      }
+    }
+
+    // Strategy 2: Docker exec pg_dump (when running on host with Docker available)
+    if (!dumpSuccess) {
+      try {
+        execSync(
+          `docker exec ${container} pg_dump -U postgres afk_business_os > "${rawDumpPath}"`,
+          { stdio: "pipe", timeout: 60000 }
+        );
+        if (fs.existsSync(rawDumpPath) && fs.statSync(rawDumpPath).size > 0) {
+          dumpSuccess = true;
+        }
+      } catch (e3: any) {
+        dumpErrors.push(`docker exec: ${e3.message}`);
+      }
+    }
+
+    // Strategy 3: Pure Node.js fallback via active database pool
+    if (!dumpSuccess) {
+      try {
+        await exportDatabaseNodeFallback(rawDumpPath);
+        if (fs.existsSync(rawDumpPath) && fs.statSync(rawDumpPath).size > 0) {
+          dumpSuccess = true;
+        }
+      } catch (e4: any) {
+        dumpErrors.push(`node fallback: ${e4.message}`);
+        throw new Error(`Database dump failed across all strategies: ${dumpErrors.join("; ")}`);
+      }
+    }
+
+    if (!fs.existsSync(rawDumpPath)) {
+      throw new Error(`Database dump file was not generated: ${rawDumpPath}`);
     }
 
     const rawData = fs.readFileSync(rawDumpPath);

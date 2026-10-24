@@ -24,7 +24,7 @@ RUN pnpm run build:init
 # 3. Production runner
 FROM node:24-alpine AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat postgresql-client
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
