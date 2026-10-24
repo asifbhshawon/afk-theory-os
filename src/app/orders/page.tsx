@@ -164,7 +164,7 @@ export default async function OrdersPage() {
       </div>
 
       {/* Create Sales Order Quick Form */}
-      <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+      <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
         <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Create Sales Order (Manual / Social)</h3>
         <form action={handleCreateOrder} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 text-xs">
           <div>
@@ -252,7 +252,7 @@ export default async function OrdersPage() {
       </div>
 
       {/* Orders List Table */}
-      <div className="bg-afk-charcoal rounded-lg border border-afk-border p-5">
+      <div className="bg-afk-card rounded-xl border border-afk-border p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Recent Sales Orders</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -340,7 +340,7 @@ export default async function OrdersPage() {
       {/* Courier Settlement & Customer Returns Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Courier Settlement Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <Truck className="w-4 h-4 text-afk-olive-accent" />
             <h3 className="text-sm font-semibold text-afk-offwhite">Courier COD Settlement Reconciliation</h3>
@@ -437,7 +437,7 @@ export default async function OrdersPage() {
         </div>
 
         {/* Customer Return & Exchange Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <RotateCcw className="w-4 h-4 text-afk-olive-accent" />
             <h3 className="text-sm font-semibold text-afk-offwhite">Customer Return & Exchange Processing</h3>

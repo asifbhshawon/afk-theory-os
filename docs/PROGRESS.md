@@ -1,8 +1,8 @@
 # AFK THEORY Business OS — Implementation & Audit Progress Tracking
 
-**Last Updated:** 2026-10-23  
-**Status:** Audit, Hardening, Atomicity Repair, UI Workflows & CSV Exports 100% Complete (9/9 Test Files, 23/23 Tests Passing)  
-**Active Branch:** `fix/audit-and-repair`
+**Last Updated:** 2026-10-24  
+**Status:** UI/UX Redesign, Typography Overhaul, and Complete Business Calendar & Printable Planners 100% Complete (14/14 Test Files, 68/68 Tests Passing, Production Build Passing)  
+**Active Branch:** `feature/ui-redesign-and-calendar`
 
 ---
 
@@ -80,6 +80,40 @@
 - [x] **Backend Atomicity (`src/server/services/finance-with-evidence.ts` & `/api/finance/entry-with-evidence`):** Pre-validates files before posting journals; coordinates WebP storage and inserts into `documents` and `documentLinks` with exact immutable database IDs. Idempotency key protection prevents duplicate postings.
 - [x] **Automated Acceptance Test Suite (`tests/acceptance/17-contextual-proof-upload.test.ts`):** 7 comprehensive tests covering partner contribution, loan, expense, transfer, late attachment (Mode B), corruption abort, and batch N+1 prevention.
 
+### Phase 9: Premium UI/UX Redesign, Typography Overhaul, and Complete Business Calendar & Printable Planner
+- [x] **Local Typography & Font Architecture:** Self-hosted `Geist` (sans), `Geist Mono` (code/tabular), and `Noto Sans Bengali` (Regular, SemiBold, Bold) in `src/fonts/` loaded via `next/font/local`. Zero external Google Fonts / CDN dependencies at runtime. Configured typography standards (14–16px body, 13–14px helper, 18–20px section headers, 26–30px page headers, 22–30px financial figures) eliminating 10–11px unreadable labels.
+- [x] **Design Tokens & Accessibility (WCAG 2.2 AA):** Configured deep charcoal (`#0E1011`), card surface (`#171B1D`), elevated surface (`#202527`), border (`#323936`), primary text (`#F4F5F1`), secondary text (`#B5BDB6`), and muted olive green (`#7D9472`) in `tailwind.config.ts` and `globals.css`. Guaranteed 4.5:1 text contrast, accessible focus rings (`focus-visible:ring-2`), refined dark scrollbars, and tabular numerals (`tabular-nums`) for currency and ledger entries.
+- [x] **Navigation & Shell Redesign:**
+  - Redesigned collapsible sidebar (`src/components/Sidebar.tsx`) with intuitive business categories (HOME, OPERATIONS, FINANCE, SYSTEM), active indicator, and clean collapsible toggle. Removed misleading badges (`NEW`, `GL`, `20%`, `WEBP`, `WIP`) and fake "Offline Safe" pill.
+  - Redesigned top header (`src/components/Header.tsx` & `src/components/HeaderClient.tsx`) with breadcrumb page title, global `Ctrl+K` command launcher, user profile menu, "+ New" quick-add dropdown, and clickable calendar date badge linking directly to `/calendar`.
+  - Global Command Palette (`src/components/CommandPalette.tsx`): Keyboard navigable `Ctrl+K` modal supporting instant search across all business routes and quick actions.
+  - Mobile Navigation (`src/components/MobileNav.tsx`): Ergonomic bottom navigation with 44px+ touch targets including Calendar shortcut.
+- [x] **Calendar & Planner Relational Data Model (`src/db/schema.ts`):** Added 6 tables:
+  1. `calendarCategories` (`calendar_categories`): User and default business categories with hex colors, sort orders, and soft archival.
+  2. `calendarEntries` (`calendar_entries`): Business activities, notes, tasks, deadlines with priority, status, venture link, partner link, scope (COMPANY, PERSONAL, VENTURE).
+  3. `calendarChecklistItems` (`calendar_checklist_items`): Actionable sub-tasks with completion timestamps.
+  4. `calendarRecurrenceRules` (`calendar_recurrence_rules`): Daily, weekly, monthly repeat rules with frequencies, intervals, and count/date terminations.
+  5. `calendarRecurrenceExceptions` (`calendar_recurrence_exceptions`): Per-occurrence title, time, or cancellation overrides without breaking the parent series.
+  6. `calendarPreferences` (`calendar_preferences`): User-level start-of-week, default view, and working hour configurations.
+- [x] **Calendar Business Engine (`src/server/services/calendar.ts`):** Complete backend service supporting default category bootstrapping, recurring event calculation/expansion, recurrence exception handling, checklist toggle atomicity, and role/scoping privacy.
+- [x] **Calendar REST API (`/api/calendar/*`):** Endpoints for entry CRUD, category management, and checklist completion toggling.
+- [x] **Full Calendar Frontend Module (`/calendar`):**
+  - Month View (`MonthView.tsx`): Full-size monthly calendar grid (the primary visual focus), day cells with category color accents, task checkboxes, deadline markers, notes, and overflow popover.
+  - Week View (`WeekView.tsx`): 7-day timetable with top all-day shelf and hourly slots (08:00–21:00).
+  - Day View (`DayView.tsx`): Selected date timeline alongside Action Checklists and Notes Pad.
+  - Agenda View (`AgendaView.tsx`): Chronological agenda grouped by date with category badges and priorities.
+  - Entry Drawer Modal (`EntryModal.tsx`): Quick note taking, tasks, events, checklists, recurrence configuration, partner/venture linking, and universal WebP evidence uploader.
+  - Category Manager (`CategoryManagerModal.tsx`): In-app customization of categories and colors.
+- [x] **Printable Business Planners & PDF Generator:**
+  - `src/components/calendar/PrintableCalendarView.tsx`: Clean high-contrast black-on-white printable layouts for:
+    - Daily Business Planner (A4 Portrait)
+    - Weekly Schedule & Priorities Planner (A4 Landscape)
+    - Monthly Activity Calendar (A4 Landscape)
+  - `src/components/calendar/PrintConfigModal.tsx`: Live preview dialog with format switcher, customizable content toggles, `window.print()` trigger, and real client-side downloadable PDF generation via `jspdf` and `html2canvas`.
+  - `src/app/print/calendar/page.tsx`: Clean standalone printable route without navigation clutter.
+- [x] **Application-Wide Route Polish:** Redesigned Dashboard (`/`) with Today's Schedule and Approaching Deadlines; modernized System Health (`/settings`) with clear distinction between AES-256-GCM encryption and SHA-256 integrity checksums, plus backup history table; improved Partners (`/partners`), Ventures (`/ventures`), Reports (`/reports`), Orders (`/orders`), Inventory (`/inventory`), Manufacturing (`/manufacturing`), and Finance (`/finance`).
+- [x] **Automated Acceptance Suite 19 (`tests/acceptance/19-business-calendar.test.ts`):** 8 comprehensive tests covering category seeding/archival, entry creation, personal privacy scoping, checklist completion, weekly recurrence expansion, single-instance exception overrides, venture linking, and dashboard agenda queries.
+
 ---
 
 ## 3. Test Verification Suite
@@ -89,22 +123,22 @@
 
  ✓ tests/acceptance/16-evidence-document-management.test.ts (13 tests)
  ✓ tests/acceptance/15-venture-investment-engine.test.ts (13 tests)
- ✓ tests/acceptance/17-contextual-proof-upload.test.ts (7 tests)
  ✓ tests/acceptance/06-sales-orders-courier.test.ts (5 tests)
+ ✓ tests/acceptance/17-contextual-proof-upload.test.ts (7 tests)
  ✓ tests/acceptance/05-manufacturing-production.test.ts (1 test)
- ✓ tests/security/access-control.test.ts (5 tests)
+ ✓ tests/acceptance/19-business-calendar.test.ts (8 tests)
  ✓ tests/acceptance/03-inventory-fabric.test.ts (2 tests)
+ ✓ tests/acceptance/18-transaction-reversal.test.ts (4 tests)
+ ✓ tests/security/access-control.test.ts (5 tests)
  ✓ tests/acceptance/08-atomic-transaction-rollback.test.ts (2 tests)
  ✓ tests/acceptance/02-equity-contribution.test.ts (2 tests)
  ✓ tests/acceptance/14-voucher-reports-agreement.test.ts (2 tests)
  ✓ tests/acceptance/12-period-close-rbac.test.ts (2 tests)
  ✓ tests/acceptance/01-partners-ownership.test.ts (2 tests)
 
- Test Files  12 passed (12)
-      Tests  56 passed (56)
-   Duration  11.11s
-
-[OK] All 12 test suites (56 tests) passed with 100% success!
+ Test Files  14 passed (14)
+      Tests  68 passed (68)
+   Duration  9.32s
 ```
 
 ---
@@ -113,34 +147,41 @@
 
 ```text
 Route (app)                                 Size  First Load JS
-┌ ƒ /                                      184 B         107 kB
-├ ƒ /_not-found                            987 B         103 kB
-├ ƒ /api/backup                            151 B         102 kB
-├ ƒ /api/documents/[id]                    151 B         102 kB
-├ ƒ /api/documents/[id]/thumbnail          151 B         102 kB
-├ ƒ /api/documents/upload                  151 B         102 kB
-├ ƒ /api/export/financial-statements       151 B         102 kB
-├ ƒ /api/export/inventory                  151 B         102 kB
-├ ƒ /api/export/orders                     151 B         102 kB
-├ ƒ /api/finance/entry-with-evidence       151 B         102 kB
-├ ƒ /api/health                            151 B         102 kB
-├ ƒ /documents                           7.05 kB         118 kB
-├ ƒ /finance                             7.65 kB         123 kB
-├ ƒ /inventory                             151 B         102 kB
-├ ƒ /login                               1.47 kB         103 kB
-├ ƒ /manufacturing                         151 B         102 kB
-├ ƒ /orders                                184 B         107 kB
-├ ƒ /partners                            5.92 kB         121 kB
-├ ƒ /print/invoice/[id]                  2.16 kB         104 kB
-├ ƒ /print/voucher/[id]                  4.78 kB         116 kB
-├ ƒ /reports                               151 B         102 kB
-├ ƒ /settings                             2.9 kB         105 kB
-├ ƒ /setup                                 184 B         107 kB
-├ ƒ /studio                                184 B         107 kB
-├ ƒ /ventures                              184 B         107 kB
-├ ƒ /ventures/[id]                       8.23 kB         115 kB
-└ ƒ /ventures/new                        7.83 kB         114 kB
-+ First Load JS shared by all             102 kB
+┌ ƒ /                                      189 B         108 kB
+├ ƒ /_not-found                            998 B         104 kB
+├ ƒ /api/backup                            174 B         103 kB
+├ ƒ /api/calendar/categories               174 B         103 kB
+├ ƒ /api/calendar/checklist/[id]           174 B         103 kB
+├ ƒ /api/calendar/entries                  174 B         103 kB
+├ ƒ /api/calendar/entries/[id]             174 B         103 kB
+├ ƒ /api/documents/[id]                    174 B         103 kB
+├ ƒ /api/documents/[id]/thumbnail          174 B         103 kB
+├ ƒ /api/documents/upload                  174 B         103 kB
+├ ƒ /api/export/financial-statements       174 B         103 kB
+├ ƒ /api/export/inventory                  174 B         103 kB
+├ ƒ /api/export/orders                     174 B         103 kB
+├ ƒ /api/finance/entry-with-evidence       174 B         103 kB
+├ ƒ /api/finance/reverse                   174 B         103 kB
+├ ƒ /api/health                            174 B         103 kB
+├ ƒ /calendar                             190 kB         305 kB
+├ ƒ /documents                           7.06 kB         120 kB
+├ ƒ /finance                             8.56 kB         129 kB
+├ ƒ /inventory                             174 B         103 kB
+├ ƒ /login                               1.47 kB         104 kB
+├ ƒ /manufacturing                         174 B         103 kB
+├ ƒ /orders                                189 B         108 kB
+├ ƒ /partners                             6.3 kB         126 kB
+├ ƒ /print/calendar                        163 B         112 kB
+├ ƒ /print/invoice/[id]                  2.18 kB         105 kB
+├ ƒ /print/voucher/[id]                  4.82 kB         118 kB
+├ ƒ /reports                               174 B         103 kB
+├ ƒ /settings                            6.32 kB         109 kB
+├ ƒ /setup                                 189 B         108 kB
+├ ƒ /studio                                189 B         108 kB
+├ ƒ /ventures                              189 B         108 kB
+├ ƒ /ventures/[id]                       8.23 kB         116 kB
+└ ƒ /ventures/new                        7.85 kB         115 kB
++ First Load JS shared by all             103 kB
 
 ✓ Compiled successfully (0 errors, 0 warnings)
 ```

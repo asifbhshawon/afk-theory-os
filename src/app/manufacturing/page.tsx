@@ -162,7 +162,7 @@ export default async function ManufacturingPage() {
       </div>
 
       {/* Production Orders Table */}
-      <div className="bg-afk-charcoal rounded-lg border border-afk-border p-5">
+      <div className="bg-afk-card rounded-xl border border-afk-border p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Manufacturing Batch Orders</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -217,7 +217,7 @@ export default async function ManufacturingPage() {
       {/* Forms Section: Create Order & Add Direct Cost */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Create Order Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Initiate Manufacturing Order</h3>
           <form action={handleCreateOrder} className="space-y-3 text-xs">
             <div>
@@ -292,7 +292,7 @@ export default async function ManufacturingPage() {
         </div>
 
         {/* Add Production Cost Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Add Direct Batch Cost (WIP Charge)</h3>
           <form action={handleAddCost} className="space-y-3 text-xs">
             <div>
@@ -380,7 +380,7 @@ export default async function ManufacturingPage() {
       {/* Forms Section 2: Issue Fabric to WIP & Complete Batch QC */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Issue Fabric to Order Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Issue Raw Fabric to Factory WIP</h3>
           <form action={handleIssueFabric} className="space-y-3 text-xs">
             <div>
@@ -450,7 +450,7 @@ export default async function ManufacturingPage() {
         </div>
 
         {/* Complete Batch Order Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Complete Batch & QC Final Valuation</h3>
           <form action={handleCompleteOrder} className="space-y-3 text-xs">
             <div>

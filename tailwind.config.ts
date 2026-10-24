@@ -11,26 +11,30 @@ const config: Config = {
     extend: {
       colors: {
         afk: {
-          black: "#0A0B0C",
-          charcoal: "#141618",
-          surface: "#1A1D21",
-          surfaceLight: "#24282E",
-          "surface-light": "#24282E",
-          card: "#16191D",
-          input: "#121417",
-          border: "#2E343D",
-          borderLight: "#3E4652",
-          "border-light": "#3E4652",
-          muted: "#9CA3AF",
-          subtle: "#6B7280",
-          offwhite: "#F5F5F0",
+          black: "#0E1011",
+          charcoal: "#141719",
+          card: "#171B1D",
+          surface: "#1A1E20",
+          elevated: "#202527",
+          surfaceLight: "#262C2F",
+          "surface-light": "#262C2F",
+          input: "#121517",
+          border: "#323936",
+          borderLight: "#424B47",
+          "border-light": "#424B47",
+          borderStrong: "#515C56",
+          "border-strong": "#515C56",
+          offwhite: "#F4F5F1",
+          secondary: "#B5BDB6",
+          muted: "#8E9890",
+          subtle: "#6E7770",
           cream: "#EAE9E1",
           olive: {
-            dark: "#1A2219",
-            muted: "#2B3828",
-            DEFAULT: "#4F6348",
-            light: "#708966",
-            accent: "#8CA982",
+            dark: "#1C241B",
+            muted: "#2C3A2A",
+            DEFAULT: "#5A7352",
+            light: "#7D9472",
+            accent: "#93AA88",
           },
           gold: "#C49A45",
           danger: "#E05252",
@@ -40,6 +44,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          "var(--font-geist-sans)",
+          "var(--font-noto-bengali)",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
@@ -49,6 +55,7 @@ const config: Config = {
           "sans-serif",
         ],
         mono: [
+          "var(--font-geist-mono)",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
@@ -56,6 +63,22 @@ const config: Config = {
           "Consolas",
           "monospace",
         ],
+        bengali: [
+          "var(--font-noto-bengali)",
+          "sans-serif",
+        ],
+      },
+      fontSize: {
+        // Enforce readable sizes across the app
+        "2xs": ["0.6875rem", { lineHeight: "0.875rem" }], // 11px (minimal use only)
+        xs: ["0.8125rem", { lineHeight: "1.125rem" }],     // 13px (secondary text)
+        sm: ["0.875rem", { lineHeight: "1.25rem" }],      // 14px (labels, forms, tables)
+        base: ["0.9375rem", { lineHeight: "1.45rem" }],    // 15px (default body)
+        md: ["1rem", { lineHeight: "1.5rem" }],           // 16px (prominent body)
+        lg: ["1.125rem", { lineHeight: "1.6rem" }],       // 18px (card headings)
+        xl: ["1.25rem", { lineHeight: "1.75rem" }],       // 20px (section headings)
+        "2xl": ["1.625rem", { lineHeight: "2rem" }],       // 26px (page headings)
+        "3xl": ["1.875rem", { lineHeight: "2.25rem" }],    // 30px (major headings)
       },
     },
   },
