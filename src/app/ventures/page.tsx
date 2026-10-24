@@ -8,15 +8,16 @@ import {
   Plus,
   TrendingUp,
   Coins,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  ArrowRight,
   Shield,
-  Filter,
+  ArrowRight,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Ventures & Investments | AFK THEORY Business OS",
+  description: "Drop projects, custom partner waterfalls, and asymmetrical capital management",
+};
 
 export default async function VenturesPage({
   searchParams,
@@ -60,19 +61,14 @@ export default async function VenturesPage({
   const currentStage = params.stage || "ALL";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 select-none">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#282E38]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-afk-border">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded bg-afk-olive/30 text-afk-olive-accent border border-afk-olive">
-              VENTURES & WATERFALL ENGINE
-            </span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white mt-1.5">
+          <h1 className="text-2xl font-bold tracking-tight text-afk-offwhite">
             Projects, Drops & Investment Pools
           </h1>
-          <p className="text-sm text-gray-300 mt-0.5">
+          <p className="text-sm text-afk-secondary mt-0.5">
             Universal partnership engine for asymmetrical capital, custom waterfalls, and drop-level accounting.
           </p>
         </div>
@@ -80,95 +76,95 @@ export default async function VenturesPage({
         <div className="flex items-center gap-3">
           <Link
             href="/studio"
-            className="px-4 py-2.5 text-xs font-bold text-gray-300 hover:text-white bg-[#14171C] border border-[#282E38] hover:border-gray-500 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
+            className="px-4 py-2 text-xs font-semibold text-afk-secondary hover:text-afk-offwhite bg-afk-surface border border-afk-border hover:bg-afk-elevated rounded-lg transition-colors flex items-center gap-2 shadow-sm"
           >
             Studio
           </Link>
           <Link
             href="/ventures/new"
-            className="px-5 py-2.5 text-xs font-bold text-white bg-afk-olive hover:bg-afk-olive-accent active:bg-afk-olive-dark rounded-xl shadow-md transition-all flex items-center gap-2"
+            className="px-4 py-2 text-xs font-semibold text-afk-offwhite bg-afk-olive hover:bg-afk-olive-light rounded-lg shadow-sm transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            New Venture
+            <span>New Venture</span>
           </Link>
         </div>
       </div>
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 bg-[#14171C] border border-[#282E38] rounded-2xl shadow-lg">
+        <div className="p-5 bg-afk-card border border-afk-border rounded-xl shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-afk-secondary uppercase tracking-wider">
               Total Ventures
             </span>
             <Layers className="w-4 h-4 text-afk-olive-accent" />
           </div>
-          <div className="text-3xl font-bold text-white mt-2 font-mono">
+          <div className="text-2xl font-bold text-afk-offwhite mt-2 tabular-nums">
             {totalVenturesCount}
           </div>
-          <span className="text-xs text-gray-400 mt-1 block">
+          <span className="text-xs text-afk-muted mt-1 block">
             {activeVenturesCount} active in production / sales
           </span>
         </div>
 
-        <div className="p-5 bg-[#14171C] border border-[#282E38] rounded-2xl shadow-lg">
+        <div className="p-5 bg-afk-card border border-afk-border rounded-xl shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-afk-secondary uppercase tracking-wider">
               Active Drops
             </span>
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <TrendingUp className="w-4 h-4 text-afk-success" />
           </div>
-          <div className="text-3xl font-bold text-emerald-400 mt-2 font-mono">
+          <div className="text-2xl font-bold text-afk-success mt-2 tabular-nums">
             {activeVenturesCount}
           </div>
-          <span className="text-xs text-gray-400 mt-1 block">
+          <span className="text-xs text-afk-muted mt-1 block">
             Generating live drop revenue
           </span>
         </div>
 
-        <div className="p-5 bg-[#14171C] border border-[#282E38] rounded-2xl shadow-lg">
+        <div className="p-5 bg-afk-card border border-afk-border rounded-xl shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-afk-secondary uppercase tracking-wider">
               Target Capital
             </span>
-            <Coins className="w-4 h-4 text-amber-400" />
+            <Coins className="w-4 h-4 text-afk-gold" />
           </div>
-          <div className="text-2xl font-bold text-white mt-2 font-mono">
-            ৳{totalTargetFund.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className="text-2xl font-bold text-afk-offwhite mt-2 tabular-nums">
+            ৳{totalTargetFund.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
           </div>
-          <span className="text-xs text-gray-400 mt-1 block">
+          <span className="text-xs text-afk-muted mt-1 block">
             Approved agreement budgets
           </span>
         </div>
 
-        <div className="p-5 bg-[#14171C] border border-[#282E38] rounded-2xl shadow-lg">
+        <div className="p-5 bg-afk-card border border-afk-border rounded-xl shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-afk-secondary uppercase tracking-wider">
               Capital Contributed
             </span>
             <Shield className="w-4 h-4 text-sky-400" />
           </div>
-          <div className="text-2xl font-bold text-sky-400 mt-2 font-mono">
-            ৳{totalContributed.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className="text-2xl font-bold text-sky-400 mt-2 tabular-nums">
+            ৳{totalContributed.toLocaleString("en-BD", { minimumFractionDigits: 2 })}
           </div>
-          <span className="text-xs text-gray-400 mt-1 block">
+          <span className="text-xs text-afk-muted mt-1 block">
             Verified in funding ledger
           </span>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#282E38]">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-afk-border">
         {STAGES.map((s) => {
           const isActive = currentStage === s.code;
           return (
             <Link
               key={s.code}
               href={`/ventures?stage=${s.code}`}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                 isActive
-                  ? "bg-afk-olive-accent text-white shadow-sm"
-                  : "text-gray-400 hover:text-white bg-[#101216] border border-[#282E38] hover:border-gray-600"
+                  ? "bg-afk-olive text-afk-offwhite shadow-sm"
+                  : "text-afk-secondary hover:text-afk-offwhite bg-afk-surface border border-afk-border"
               }`}
             >
               {s.label}
@@ -179,21 +175,21 @@ export default async function VenturesPage({
 
       {/* Ventures List */}
       {allVentures.length === 0 ? (
-        <div className="p-14 text-center bg-[#14171C] border border-dashed border-[#282E38] rounded-2xl">
-          <Layers className="w-12 h-12 text-gray-500 mx-auto mb-3 opacity-50" />
-          <h3 className="text-base font-bold text-white">No Ventures Found</h3>
-          <p className="text-sm text-gray-400 mt-1 max-w-sm mx-auto">
+        <div className="p-12 text-center bg-afk-card border border-dashed border-afk-border rounded-xl">
+          <Layers className="w-10 h-10 text-afk-muted mx-auto mb-2 opacity-60" />
+          <h3 className="text-sm font-bold text-afk-offwhite">No Ventures Found</h3>
+          <p className="text-xs text-afk-secondary mt-1 max-w-sm mx-auto">
             {currentStage === "ALL"
               ? "Start by creating your first venture, independent project, or seasonal apparel drop."
               : `There are currently no ventures in stage '${currentStage}'.`}
           </p>
-          <div className="mt-5">
+          <div className="mt-4">
             <Link
               href="/ventures/new"
-              className="px-5 py-2.5 text-xs font-bold text-white bg-afk-olive hover:bg-afk-olive-accent rounded-xl shadow transition-colors inline-flex items-center gap-2"
+              className="px-4 py-2 text-xs font-semibold text-afk-offwhite bg-afk-olive hover:bg-afk-olive-light rounded-lg shadow transition-colors inline-flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Create First Venture
+              <span>Create First Venture</span>
             </Link>
           </div>
         </div>
@@ -215,65 +211,66 @@ export default async function VenturesPage({
             return (
               <div
                 key={v.id}
-                className="bg-[#14171C] border border-[#282E38] rounded-2xl p-6 hover:border-afk-olive/60 transition-all flex flex-col justify-between shadow-xl"
+                className="bg-afk-card border border-afk-border rounded-xl p-5 hover:border-afk-border-strong transition flex flex-col justify-between shadow-sm"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-xs font-mono font-bold text-afk-olive-accent px-2 py-0.5 rounded bg-afk-olive/20 border border-afk-olive/40">
                       {v.code}
                     </span>
                     <span
-                      className={`px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full border ${stageBadgeStyle}`}
+                      className={`px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full border ${stageBadgeStyle}`}
                     >
                       {v.stage.replace("_", " ")}
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-bold text-white mb-1.5 group-hover:text-afk-olive-accent">
+                  <h3 className="text-base font-bold text-afk-offwhite mb-1">
                     {v.name}
                   </h3>
 
-                  <p className="text-xs text-gray-400 line-clamp-2 mb-4 leading-relaxed">
+                  <p className="text-xs text-afk-secondary line-clamp-2 mb-4 leading-relaxed">
                     {v.description || "No description provided."}
                   </p>
 
-                  <div className="grid grid-cols-2 gap-3 py-3.5 border-t border-b border-[#282E38]/80 text-xs">
+                  <div className="grid grid-cols-2 gap-3 py-3 border-t border-b border-afk-border text-xs">
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Type</span>
-                      <span className="font-semibold text-white">{v.typeName}</span>
+                      <span className="text-afk-muted block text-[10px] uppercase font-bold tracking-wider">Type</span>
+                      <span className="font-semibold text-afk-offwhite">{v.typeName}</span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Manager</span>
-                      <span className="font-semibold text-white">
+                      <span className="text-afk-muted block text-[10px] uppercase font-bold tracking-wider">Manager</span>
+                      <span className="font-semibold text-afk-offwhite">
                         {v.managerName || "Unassigned"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Budget Cap</span>
-                      <span className="font-mono font-bold text-white text-sm">
-                        {v.budgetCap ? `৳${parseFloat(v.budgetCap).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "None"}
+                      <span className="text-afk-muted block text-[10px] uppercase font-bold tracking-wider">Budget Cap</span>
+                      <span className="font-bold text-afk-offwhite text-xs tabular-nums">
+                        {v.budgetCap ? `৳${parseFloat(v.budgetCap).toLocaleString("en-BD")}` : "None"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Launch Target</span>
-                      <span className="font-semibold text-white">
+                      <span className="text-afk-muted block text-[10px] uppercase font-bold tracking-wider">Launch Target</span>
+                      <span className="font-semibold text-afk-offwhite">
                         {v.targetLaunchDate
-                          ? new Date(v.targetLaunchDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          ? new Date(v.targetLaunchDate).toLocaleDateString("en-BD", { month: "short", day: "numeric", year: "numeric" })
                           : "TBD"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-gray-400 font-mono">
-                    Created {new Date(v.createdAt).toLocaleDateString()}
+                <div className="mt-4 pt-2 flex items-center justify-between">
+                  <span className="text-xs text-afk-muted">
+                    Created {new Date(v.createdAt).toLocaleDateString("en-BD", { month: "short", day: "numeric" })}
                   </span>
                   <Link
                     href={`/ventures/${v.id}`}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-afk-olive-accent hover:text-white transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-afk-olive-accent hover:text-afk-offwhite transition-colors"
                   >
-                    Open Workspace <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Open Workspace</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>
               </div>

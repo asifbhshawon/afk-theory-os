@@ -1063,3 +1063,138 @@ export const workflowDefinitions = pgTable("workflow_definitions", {
   isActive: boolean("is_active").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+
+// ==============================================================================
+// 9. CALENDAR, NOTES, TASKS & BUSINESS PLANNER
+// ==============================================================================
+
+export const calendarCategories = pgTable(
+  "calendar_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    color: text("color").notNull().default("#7D9472"),
+    icon: text("icon").default("Calendar"),
+    description: text("description"),
+    isShared: boolean("is_shared").notNull().default(true),
+    isArchived: boolean("is_archived").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("cal_categories_slug_idx").on(table.slug),
+    index("cal_categories_archived_idx").on(table.isArchived),
+  ]
+);
+
+export const calendarEntries = pgTable(
+  "calendar_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    entryType: text("entry_type").notNull().default("NOTE"), // EVENT, NOTE, TASK, DEADLINE, REMINDER
+    status: text("status").notNull().default("PENDING"), // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+    priority: text("priority").notNull().default("MEDIUM"), // LOW, MEDIUM, HIGH, URGENT
+    startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    endDate: timestamp("end_date", { withTimezone: true }),
+    isAllDay: boolean("is_all_day").notNull().default(false),
+    location: text("location"),
+    scope: text("scope").notNull().default("COMPANY"), // COMPANY, VENTURE, PERSONAL
+    visibility: text("visibility").notNull().default("PUBLIC"), // PUBLIC, PARTICIPANTS, PRIVATE
+    categoryId: uuid("category_id").references(() => calendarCategories.id, { onDelete: "set null" }),
+    ventureId: uuid("venture_id").references(() => ventures.id, { onDelete: "set null" }),
+    productionOrderId: uuid("production_order_id").references(() => productionOrders.id, { onDelete: "set null" }),
+    salesOrderId: uuid("sales_order_id").references(() => salesOrders.id, { onDelete: "set null" }),
+    purchaseOrderId: uuid("purchase_order_id").references(() => purchaseOrders.id, { onDelete: "set null" }),
+    assignedPartnerId: uuid("assigned_partner_id").references(() => partners.id, { onDelete: "set null" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tags: jsonb("tags"),
+    isArchived: boolean("is_archived").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("cal_entries_start_idx").on(table.startDate),
+    index("cal_entries_end_idx").on(table.endDate),
+    index("cal_entries_type_idx").on(table.entryType),
+    index("cal_entries_status_idx").on(table.status),
+    index("cal_entries_scope_idx").on(table.scope),
+    index("cal_entries_owner_idx").on(table.ownerUserId),
+    index("cal_entries_cat_idx").on(table.categoryId),
+    index("cal_entries_venture_idx").on(table.ventureId),
+    index("cal_entries_archived_idx").on(table.isArchived),
+  ]
+);
+
+export const calendarChecklistItems = pgTable(
+  "calendar_checklist_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    calendarEntryId: uuid("calendar_entry_id")
+      .notNull()
+      .references(() => calendarEntries.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    isCompleted: boolean("is_completed").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("cal_checklist_entry_idx").on(table.calendarEntryId),
+  ]
+);
+
+export const calendarRecurrenceRules = pgTable(
+  "calendar_recurrence_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    calendarEntryId: uuid("calendar_entry_id")
+      .notNull()
+      .references(() => calendarEntries.id, { onDelete: "cascade" }),
+    frequency: text("frequency").notNull().default("WEEKLY"), // DAILY, WEEKLY, MONTHLY, YEARLY
+    interval: integer("interval").notNull().default(1),
+    daysOfWeek: jsonb("days_of_week"), // e.g. [1, 3, 5]
+    dayOfMonth: integer("day_of_month"),
+    untilDate: timestamp("until_date", { withTimezone: true }),
+    maxOccurrences: integer("max_occurrences"),
+  },
+  (table) => [
+    uniqueIndex("cal_recurrence_entry_idx").on(table.calendarEntryId),
+  ]
+);
+
+export const calendarRecurrenceExceptions = pgTable(
+  "calendar_recurrence_exceptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    calendarEntryId: uuid("calendar_entry_id")
+      .notNull()
+      .references(() => calendarEntries.id, { onDelete: "cascade" }),
+    originalDate: timestamp("original_date", { withTimezone: true }).notNull(),
+    isCancelled: boolean("is_cancelled").notNull().default(false),
+    overrideTitle: text("override_title"),
+    overrideStartDate: timestamp("override_start_date", { withTimezone: true }),
+    overrideEndDate: timestamp("override_end_date", { withTimezone: true }),
+  },
+  (table) => [
+    index("cal_exceptions_entry_idx").on(table.calendarEntryId, table.originalDate),
+  ]
+);
+
+export const calendarPreferences = pgTable("calendar_preferences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  defaultView: text("default_view").notNull().default("MONTH"), // MONTH, WEEK, DAY, AGENDA
+  firstDayOfWeek: integer("first_day_of_week").notNull().default(6), // 0: Sun, 1: Mon, 6: Sat
+  defaultCategoryIds: jsonb("default_category_ids"),
+  timezone: text("timezone").notNull().default("Asia/Dhaka"),
+});

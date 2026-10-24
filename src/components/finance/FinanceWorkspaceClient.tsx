@@ -407,7 +407,7 @@ export function FinanceWorkspaceClient({
       {/* Action Forms Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Record Business Expense Quick Form */}
-        <div ref={formRef} className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div ref={formRef} className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <Receipt className="w-4 h-4 text-afk-olive" />
@@ -632,7 +632,7 @@ export function FinanceWorkspaceClient({
         </div>
 
         {/* Transfer Funds Between Payment Accounts Form */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <ArrowRightLeft className="w-4 h-4 text-afk-olive-accent" />
@@ -743,7 +743,7 @@ export function FinanceWorkspaceClient({
       </div>
 
       {/* Posted Journal Entries Table with Evidence Badges and Add Proof */}
-      <div className="bg-afk-charcoal rounded-xl border border-afk-border p-5 space-y-3">
+      <div className="bg-afk-card rounded-xl border border-afk-border p-6 space-y-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-afk-border/60">
           <div>
             <h3 className="text-sm font-semibold text-afk-offwhite">
@@ -818,7 +818,7 @@ export function FinanceWorkspaceClient({
                 <th className="py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-afk-border/40 font-mono">
+            <tbody className="divide-y divide-afk-border/40">
               {(() => {
                 const displayedEntries =
                   viewMode === "ACTIVE"

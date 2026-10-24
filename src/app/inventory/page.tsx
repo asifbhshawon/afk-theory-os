@@ -145,7 +145,7 @@ export default async function InventoryPage() {
       {/* Inventory Action Forms Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Receive Purchase Lot Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Receive Goods / Raw Materials Lot</h3>
           <form action={handleReceiveLot} className="space-y-3 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -241,7 +241,7 @@ export default async function InventoryPage() {
         </div>
 
         {/* Create New Product Style Form */}
-        <div className="bg-afk-charcoal p-5 rounded-lg border border-afk-border">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm">
           <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Add Catalog Style & SKU Variant</h3>
           <form action={handleCreateProduct} className="space-y-3 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -350,7 +350,7 @@ export default async function InventoryPage() {
       </div>
 
       {/* Active Inventory Lots Table */}
-      <div className="bg-afk-charcoal rounded-lg border border-afk-border p-5">
+      <div className="bg-afk-card rounded-xl border border-afk-border p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Inventory Lots (Traceable Actual Cost)</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -399,7 +399,7 @@ export default async function InventoryPage() {
       </div>
 
       {/* Stock Movement Ledger */}
-      <div className="bg-afk-charcoal rounded-lg border border-afk-border p-5">
+      <div className="bg-afk-card rounded-xl border border-afk-border p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-afk-offwhite mb-3">Stock Movement Ledger</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">

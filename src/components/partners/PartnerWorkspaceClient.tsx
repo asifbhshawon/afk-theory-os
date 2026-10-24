@@ -342,7 +342,7 @@ export function PartnerWorkspaceClient({
       {/* Transaction Action Forms Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* FORM 1: Equity Contribution */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <DollarSign className="w-4 h-4 text-emerald-400" />
@@ -486,7 +486,7 @@ export function PartnerWorkspaceClient({
         </div>
 
         {/* FORM 2: Partner Loan Advance */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <ArrowDownLeft className="w-4 h-4 text-amber-400" />
@@ -630,7 +630,7 @@ export function PartnerWorkspaceClient({
         </div>
 
         {/* FORM 3: Partner Drawings (Withdrawal) */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <ArrowUpRight className="w-4 h-4 text-purple-400" />
@@ -774,7 +774,7 @@ export function PartnerWorkspaceClient({
         </div>
 
         {/* FORM 4: Loan Repayment / Reimbursement */}
-        <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border flex flex-col justify-between space-y-4">
+        <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center gap-2 pb-2 border-b border-afk-border/60">
               <Receipt className="w-4 h-4 text-sky-400" />
@@ -919,7 +919,7 @@ export function PartnerWorkspaceClient({
       </div>
 
       {/* PARTNER FINANCIAL HISTORY & TRANSACTION PROOF SECTION */}
-      <div className="bg-afk-charcoal p-5 rounded-xl border border-afk-border space-y-4">
+      <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-afk-border/60">
           <div>
             <h3 className="text-sm font-semibold text-afk-offwhite flex items-center gap-2">
@@ -996,7 +996,7 @@ export function PartnerWorkspaceClient({
                 <th className="py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-afk-border/40 font-mono">
+            <tbody className="divide-y divide-afk-border/40">
               {(() => {
                 const displayedHistory =
                   viewMode === "ACTIVE"
