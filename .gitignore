@@ -16,9 +16,9 @@ scripts/init-db.cjs
 !.env.example
 
 # Local storage and backups
-storage/
-backups/
-data/
+/storage/
+/backups/
+/data/
 *.db
 *.sqlite
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import { getCurrentUser } from "@/lib/auth";
-import { getDocumentById, resolveStoragePath } from "@/server/services/evidence";
+import { getDocumentById } from "@/server/services/evidence";
+import { readStorageFile } from "@/server/storage";
 
 export async function GET(
   req: NextRequest,
@@ -38,13 +38,12 @@ export async function GET(
       return NextResponse.redirect(url);
     }
 
-    const thumbPath = resolveStoragePath(doc.thumbnailPath);
-    if (!fs.existsSync(thumbPath)) {
+    let thumbBuffer = await readStorageFile(doc.thumbnailPath);
+    if (!thumbBuffer) {
       // Fallback to original file if thumbnail missing
-      const fullPath = resolveStoragePath(doc.storagePath);
-      if (fs.existsSync(fullPath)) {
-        const fullBuffer = fs.readFileSync(fullPath);
-        return new NextResponse(fullBuffer, {
+      thumbBuffer = await readStorageFile(doc.storagePath);
+      if (thumbBuffer) {
+        return new NextResponse(thumbBuffer, {
           status: 200,
           headers: {
             "Content-Type": doc.mimeType,
@@ -53,12 +52,10 @@ export async function GET(
         });
       }
       return NextResponse.json(
-        { success: false, error: "Thumbnail file not found" },
+        { success: false, error: "Thumbnail file not found in storage" },
         { status: 404 }
       );
     }
-
-    const thumbBuffer = fs.readFileSync(thumbPath);
 
     return new NextResponse(thumbBuffer, {
       status: 200,

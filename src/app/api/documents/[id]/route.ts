@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import { getCurrentUser } from "@/lib/auth";
-import { getDocumentById, resolveStoragePath } from "@/server/services/evidence";
+import { getDocumentById } from "@/server/services/evidence";
+import { readStorageFile } from "@/server/storage";
 
 export async function GET(
   req: NextRequest,
@@ -32,15 +32,14 @@ export async function GET(
       );
     }
 
-    const filePath = resolveStoragePath(doc.storagePath);
-    if (!fs.existsSync(filePath)) {
+    const fileBuffer = await readStorageFile(doc.storagePath);
+    if (!fileBuffer) {
       return NextResponse.json(
-        { success: false, error: "Document file not found on disk" },
+        { success: false, error: "Document file not found in storage" },
         { status: 404 }
       );
     }
 
-    const fileBuffer = fs.readFileSync(filePath);
     const searchParams = req.nextUrl.searchParams;
     const isDownload = searchParams.get("download") === "1";
 
@@ -61,9 +60,10 @@ export async function GET(
       status: 200,
       headers,
     });
-  } catch (err: any) {
+  } catch (error: any) {
+    console.error("Error retrieving evidence document:", error);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to retrieve document" },
+      { success: false, error: error.message || "Failed to retrieve evidence file" },
       { status: 500 }
     );
   }
