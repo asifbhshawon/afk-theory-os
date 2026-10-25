@@ -97,8 +97,8 @@ export default async function DashboardPage() {
     .orderBy(desc(portalActivityFeed.timestamp))
     .limit(6);
 
-  // 8. Fetch upcoming deadlines / meetings from calendar
-  const upcomingDeadlines = await db
+  // 8. Fetch upcoming deadlines / meetings or recent notes from calendar
+  let upcomingDeadlines = await db
     .select()
     .from(portalCalendarEntries)
     .where(
@@ -109,6 +109,15 @@ export default async function DashboardPage() {
     )
     .orderBy(asc(portalCalendarEntries.startDate))
     .limit(4);
+
+  if (upcomingDeadlines.length === 0) {
+    upcomingDeadlines = await db
+      .select()
+      .from(portalCalendarEntries)
+      .where(eq(portalCalendarEntries.isArchived, false))
+      .orderBy(desc(portalCalendarEntries.startDate))
+      .limit(4);
+  }
 
   return (
     <div className="space-y-6">
@@ -438,7 +447,7 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between pb-3 border-b border-afk-border">
               <h3 className="text-sm font-bold text-afk-offwhite flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-afk-olive-accent" />
-                <span>Upcoming Activities</span>
+                <span>Recent & Upcoming Activities</span>
               </h3>
               <Link
                 href="/calendar"
