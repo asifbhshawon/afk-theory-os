@@ -23,11 +23,11 @@ Five verified founding partner identities are seeded:
 
 | Partner | Email | Initial Password | Role | Permitted Ventures |
 | :--- | :--- | :--- | :--- | :--- |
-| **Shawon** | `shawon@afktheory.com` | `AFK-Shawon-Executive-2026!` | `ADMIN` | All (`*`) |
-| **Rafi** | `rafi@afktheory.com` | `AFK-Rafi-Partner-2026!` | `PARTNER` | `VENT-2026-0001`, `VENT-2026-0002` |
-| **Tousif** | `tousif@afktheory.com` | `AFK-Tousif-Partner-2026!` | `PARTNER` | `VENT-2026-0001` |
-| **Midhat** | `midhat@afktheory.com` | `AFK-Midhat-Partner-2026!` | `PARTNER` | `VENT-2026-0001` |
-| **Mueid** | `mueid@afktheory.com` | `AFK-Mueid-Partner-2026!` | `PARTNER` | `VENT-2026-0002` |
+| **Shawon** | `shawon@afktheory.com` | *(Configured via Vercel env)* | `ADMIN` | All (`*`) |
+| **Rafi** | `rafi@afktheory.com` | *(Configured via Vercel env)* | `PARTNER` | `VENT-2026-0001`, `VENT-2026-0002` |
+| **Tousif** | `tousif@afktheory.com` | *(Configured via Vercel env)* | `PARTNER` | `VENT-2026-0001` |
+| **Midhat** | `midhat@afktheory.com` | *(Configured via Vercel env)* | `PARTNER` | `VENT-2026-0001` |
+| **Mueid** | `mueid@afktheory.com` | *(Configured via Vercel env)* | `PARTNER` | `VENT-2026-0002` |
 
 ---
 

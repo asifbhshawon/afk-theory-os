@@ -8,6 +8,7 @@ import {
   createPartnerSession,
   PARTNER_SESSION_COOKIE,
   SESSION_TTL_HOURS,
+  LEAKED_EXPOSED_PASSWORDS,
 } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -21,6 +22,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Email and password are required." },
         { status: 400 }
+      );
+    }
+
+    // Immediately reject retired leaked credentials
+    if (LEAKED_EXPOSED_PASSWORDS.has(password)) {
+      return NextResponse.json(
+        { error: "This password has been retired for security reasons. Please use your newly rotated credentials." },
+        { status: 403 }
       );
     }
 

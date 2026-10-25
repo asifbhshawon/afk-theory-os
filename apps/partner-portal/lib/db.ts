@@ -27,6 +27,35 @@ const requiresSsl =
   connectionString.includes("aws.connect.psdb.cloud") ||
   process.env.DB_SSL === "true";
 
+function getSslConfiguration(): pg.ConnectionConfig["ssl"] {
+  if (!requiresSsl) {
+    return undefined;
+  }
+
+  // Non-production opt-out for development self-signed certs
+  const allowInsecure =
+    (process.env.DB_SSL_INSECURE === "true" || process.env.DB_SSL_REJECT_UNAUTHORIZED === "false") &&
+    process.env.NODE_ENV !== "production";
+
+  if (allowInsecure) {
+    console.warn(
+      "[Database TLS Warning] rejectUnauthorized=false is enabled for non-production development/test."
+    );
+    return { rejectUnauthorized: false };
+  }
+
+  // Strict TLS validation (default in production)
+  const sslConfig: { rejectUnauthorized: boolean; ca?: string } = {
+    rejectUnauthorized: true,
+  };
+
+  if (process.env.DB_CA_CERT) {
+    sslConfig.ca = process.env.DB_CA_CERT;
+  }
+
+  return sslConfig;
+}
+
 const globalForDb = globalThis as unknown as {
   pool: pg.Pool | undefined;
 };
@@ -38,7 +67,7 @@ export const pool =
     max: isServerless ? 2 : 10,
     idleTimeoutMillis: isServerless ? 10000 : 30000,
     connectionTimeoutMillis: 10000,
-    ssl: requiresSsl ? { rejectUnauthorized: false } : undefined,
+    ssl: getSslConfiguration(),
   });
 
 if (process.env.NODE_ENV !== "production") {

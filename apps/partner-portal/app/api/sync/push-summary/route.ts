@@ -4,9 +4,16 @@ import { applyLocalErpPushSummary, SyncPushPayload } from "@/lib/sync";
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
-    const syncSecret = process.env.SYNC_SHARED_SECRET || "afk-theory-partner-portal-sync-secret-key-2026";
+    const syncSecret = process.env.SYNC_SHARED_SECRET;
 
-    // Enforce authorization
+    if (!syncSecret) {
+      return NextResponse.json(
+        { error: "Server configuration error: SYNC_SHARED_SECRET is not configured on the portal." },
+        { status: 500 }
+      );
+    }
+
+    // Enforce strict authorization
     if (authHeader !== `Bearer ${syncSecret}` && req.headers.get("x-sync-secret") !== syncSecret) {
       return NextResponse.json(
         { error: "Unauthorized sync request. Invalid sync secret." },

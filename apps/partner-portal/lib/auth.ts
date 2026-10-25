@@ -9,6 +9,7 @@ import {
   SESSION_TTL_HOURS,
   INITIAL_FOUNDING_PARTNERS,
   PortalPartner,
+  FoundingPartnerConfig,
 } from "./constants";
 
 export {
@@ -16,7 +17,17 @@ export {
   SESSION_TTL_HOURS,
   INITIAL_FOUNDING_PARTNERS,
   type PortalPartner,
+  type FoundingPartnerConfig,
 };
+
+// Blacklist of previously exposed default credentials that must NEVER be accepted
+export const LEAKED_EXPOSED_PASSWORDS = new Set([
+  "AFK-Shawon-Executive-2026!",
+  "AFK-Rafi-Partner-2026!",
+  "AFK-Tousif-Partner-2026!",
+  "AFK-Midhat-Partner-2026!",
+  "AFK-Mueid-Partner-2026!",
+]);
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -36,6 +47,52 @@ export function verifyPassword(password: string, combinedHash: string): boolean 
   }
 }
 
+/**
+ * Resolves the configured initial password for a partner from environment variables.
+ * In production, partner credentials must be supplied via environment variables
+ * (e.g. PARTNER_PASSWORD_SHAWON or INITIAL_PARTNER_PASSWORDS_JSON).
+ */
+export function getPartnerInitialPassword(partnerId: string): string | null {
+  const suffix = partnerId.replace("partner-", "").toUpperCase();
+
+  // 1. Check partner-specific environment variable
+  const directEnv =
+    process.env[`PARTNER_PASSWORD_${suffix}`] ||
+    process.env[`PARTNER_${suffix}_PASSWORD`];
+  if (directEnv) {
+    if (LEAKED_EXPOSED_PASSWORDS.has(directEnv)) {
+      throw new Error(
+        `Security Error: Environment variable for ${partnerId} contains a retired exposed credential. Please provide a new secret.`
+      );
+    }
+    return directEnv;
+  }
+
+  // 2. Check JSON dictionary environment variable
+  if (process.env.INITIAL_PARTNER_PASSWORDS_JSON) {
+    try {
+      const map = JSON.parse(process.env.INITIAL_PARTNER_PASSWORDS_JSON);
+      if (map[partnerId]) {
+        if (LEAKED_EXPOSED_PASSWORDS.has(map[partnerId])) {
+          throw new Error(
+            `Security Error: INITIAL_PARTNER_PASSWORDS_JSON for ${partnerId} contains a retired exposed credential.`
+          );
+        }
+        return map[partnerId];
+      }
+    } catch (e: any) {
+      console.error("[Auth] Failed to parse INITIAL_PARTNER_PASSWORDS_JSON", e);
+    }
+  }
+
+  // 3. For automated unit & acceptance tests (Vitest)
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    return `AFK-Test-Secure-${suffix}-2026#SecureTestKey`;
+  }
+
+  return null;
+}
+
 let partnersInitialized = false;
 
 export async function ensurePortalPartnersInitialized() {
@@ -51,15 +108,43 @@ export async function ensurePortalPartnersInitialized() {
         .limit(1);
 
       if (!existing) {
+        // Resolve initial password or generate secure onboarding token
+        const configuredPass = getPartnerInitialPassword(p.id);
+        const passwordToHash = configuredPass || randomBytes(32).toString("hex");
+
         await db.insert(portalPartners).values({
           id: p.id,
           name: p.name,
           email: p.email,
-          passwordHash: hashPassword(p.initialPassword),
+          passwordHash: hashPassword(passwordToHash),
           role: p.role,
           isActive: true,
           permittedVentureIds: p.permittedVentureIds,
         });
+
+        if (!configuredPass) {
+          console.warn(
+            `[Auth Onboarding] Partner ${p.email} provisioned without env credentials. Requires administrator invite or password setup.`
+          );
+        }
+      } else {
+        // Credential Rotation Enforcement:
+        // If the database has an existing password that matches any retired leaked password, rotate it or invalidate it.
+        for (const leaked of LEAKED_EXPOSED_PASSWORDS) {
+          if (verifyPassword(leaked, existing.passwordHash)) {
+            console.warn(`[Security Alert] Leaked credential detected for partner ${p.id}. Rotating...`);
+            const rotatedPassword = getPartnerInitialPassword(p.id);
+            const replacementHash = hashPassword(rotatedPassword || randomBytes(32).toString("hex"));
+
+            await db
+              .update(portalPartners)
+              .set({ passwordHash: replacementHash })
+              .where(eq(portalPartners.id, p.id));
+
+            console.log(`[Security OK] Successfully rotated/invalidated compromised credentials for ${p.id}.`);
+            break;
+          }
+        }
       }
     }
     partnersInitialized = true;

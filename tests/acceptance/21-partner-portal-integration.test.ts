@@ -25,6 +25,8 @@ import {
   hasVentureAccess,
   INITIAL_FOUNDING_PARTNERS,
   PortalPartner,
+  getPartnerInitialPassword,
+  LEAKED_EXPOSED_PASSWORDS,
 } from "../../apps/partner-portal/lib/auth";
 import {
   createPortalCalendarEntry,
@@ -55,14 +57,21 @@ describe("Acceptance Suite 21: AFK THEORY Separate Partner Portal Integration", 
       expect(p).toBeDefined();
       expect(p?.email).toBe(`${name.toLowerCase()}@afktheory.com`);
 
-      // Verify password authentication
-      const hash = hashPassword(p!.initialPassword);
-      const isMatch = verifyPassword(p!.initialPassword, hash);
+      // Verify password authentication with secure rotated credentials
+      const securePassword = getPartnerInitialPassword(p!.id);
+      expect(securePassword).toBeTruthy();
+      const hash = hashPassword(securePassword!);
+      const isMatch = verifyPassword(securePassword!, hash);
       expect(isMatch).toBe(true);
 
       // Verify wrong password rejects
       const wrongMatch = verifyPassword("WrongPassword123!", hash);
       expect(wrongMatch).toBe(false);
+
+      // Verify leaked password blacklist prevents reuse of old compromised credentials
+      for (const leaked of LEAKED_EXPOSED_PASSWORDS) {
+        expect(securePassword).not.toBe(leaked);
+      }
     }
   });
 
@@ -303,6 +312,25 @@ describe("Acceptance Suite 21: AFK THEORY Separate Partner Portal Integration", 
     expect(sample.id).toBeDefined();
     expect(sample.title).toBeDefined();
     expect(sample.updatedAt).toBeDefined();
+
+    // Verify per-user permission filtering on pull endpoint
+    const mueid: PortalPartner = {
+      id: "partner-mueid",
+      name: "Mueid",
+      email: "mueid@afktheory.com",
+      role: "PARTNER",
+      isActive: true,
+      permittedVentureIds: ["VENT-2026-0002"],
+    };
+    const scopedPull = await getCalendarEntriesSince(undefined, mueid);
+    for (const e of scopedPull.entries) {
+      if (e.scope === "PERSONAL") {
+        expect(e.ownerPartnerId).toBe("partner-mueid");
+      }
+      if (e.scope === "VENTURE") {
+        expect(e.ventureId).toBe("VENT-2026-0002");
+      }
+    }
   });
 
   // 11. Retaining notes after the business summary refreshes

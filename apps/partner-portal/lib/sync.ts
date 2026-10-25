@@ -12,7 +12,8 @@ import {
   portalCalendarChecklists,
   portalCalendarRecurrence,
 } from "./schema";
-import { eq, gt, and, desc, sql } from "drizzle-orm";
+import { eq, gt, and, or, inArray, desc, sql } from "drizzle-orm";
+import type { PortalPartner } from "./constants";
 
 export interface SyncPushPayload {
   syncCursor: string;
@@ -444,16 +445,46 @@ export async function getSyncStatus() {
   };
 }
 
-// Fetch portal calendar entries modified since given timestamp for local ERP pull
-export async function getCalendarEntriesSince(sinceTimestamp?: Date | string) {
+// Fetch portal calendar entries modified since given timestamp for local ERP pull or partner view
+export async function getCalendarEntriesSince(
+  sinceTimestamp?: Date | string,
+  partner?: PortalPartner
+) {
+  const conditions = [
+    sinceTimestamp
+      ? gt(portalCalendarEntries.updatedAt, new Date(sinceTimestamp))
+      : sql`1=1`,
+  ];
+
+  // Enforce per-user permissions when called by a partner session
+  if (partner) {
+    const isFullAccess = partner.role === 'ADMIN' || partner.permittedVentureIds.includes('*');
+    if (!isFullAccess) {
+      const ventureCondition =
+        partner.permittedVentureIds.length > 0
+          ? inArray(portalCalendarEntries.ventureId, partner.permittedVentureIds)
+          : sql`FALSE`;
+
+      conditions.push(
+        or(
+          eq(portalCalendarEntries.scope, 'COMPANY'),
+          and(
+            eq(portalCalendarEntries.scope, 'PERSONAL'),
+            eq(portalCalendarEntries.ownerPartnerId, partner.id)
+          ),
+          and(
+            eq(portalCalendarEntries.scope, 'VENTURE'),
+            ventureCondition
+          )
+        )!
+      );
+    }
+  }
+
   const query = db
     .select()
     .from(portalCalendarEntries)
-    .where(
-      sinceTimestamp
-        ? gt(portalCalendarEntries.updatedAt, new Date(sinceTimestamp))
-        : sql`1=1`
-    )
+    .where(and(...conditions))
     .orderBy(desc(portalCalendarEntries.updatedAt));
 
   const entries = await query;

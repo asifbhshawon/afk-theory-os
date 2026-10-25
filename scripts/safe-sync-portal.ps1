@@ -50,7 +50,8 @@ if (-not $SyncSecret) {
 }
 
 if (-not $SyncSecret) {
-    $SyncSecret = "afk-theory-partner-portal-sync-secret-key-2026"
+    Write-Error "[Error] SYNC_SHARED_SECRET is required. Provide -SyncSecret or set SYNC_SHARED_SECRET in .env."
+    exit 1
 }
 
 Write-Host "Target Portal URL:  $PortalUrl" -ForegroundColor Yellow

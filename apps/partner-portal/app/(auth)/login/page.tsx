@@ -40,7 +40,7 @@ export default function LoginPage() {
 
   const handleQuickSwitch = (p: typeof INITIAL_FOUNDING_PARTNERS[0]) => {
     setEmail(p.email);
-    setPassword(p.initialPassword);
+    setPassword("");
   };
 
   return (

@@ -5,22 +5,24 @@ import { getCurrentPartner } from "@/lib/auth";
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
-    const syncSecret = process.env.SYNC_SHARED_SECRET || "afk-theory-partner-portal-sync-secret-key-2026";
+    const syncSecret = process.env.SYNC_SHARED_SECRET;
     const partner = await getCurrentPartner();
 
-    const isAuthorized =
-      authHeader === `Bearer ${syncSecret}` ||
-      req.headers.get("x-sync-secret") === syncSecret ||
-      partner !== null;
+    // Determine authorization type: ERP Secret Sync vs Partner Session
+    const isErpSync =
+      Boolean(syncSecret) &&
+      (authHeader === `Bearer ${syncSecret}` || req.headers.get("x-sync-secret") === syncSecret);
 
-    if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isErpSync && !partner) {
+      return NextResponse.json({ error: "Unauthorized access to calendar data." }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
     const since = searchParams.get("since") || undefined;
 
-    const data = await getCalendarEntriesSince(since);
+    // ERP synchronization receives all records; Partner sessions are strictly scoped by permissions
+    const data = await getCalendarEntriesSince(since, isErpSync ? undefined : partner!);
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),

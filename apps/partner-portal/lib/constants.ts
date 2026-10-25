@@ -11,14 +11,23 @@ export interface PortalPartner {
   avatarUrl?: string | null;
 }
 
-export const INITIAL_FOUNDING_PARTNERS = [
+export interface FoundingPartnerConfig {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  permittedVentureIds: string[];
+}
+
+// Five founding partners with least-privilege venture assignments.
+// Passwords are NOT stored in code and must be configured via environment variables or secure onboarding.
+export const INITIAL_FOUNDING_PARTNERS: FoundingPartnerConfig[] = [
   {
     id: "partner-shawon",
     name: "Shawon",
     email: "shawon@afktheory.com",
     role: "ADMIN",
     permittedVentureIds: ["*"], // Full access across all ventures
-    initialPassword: "AFK-Shawon-Executive-2026!",
   },
   {
     id: "partner-rafi",
@@ -26,7 +35,6 @@ export const INITIAL_FOUNDING_PARTNERS = [
     email: "rafi@afktheory.com",
     role: "PARTNER",
     permittedVentureIds: ["VENT-2026-0001", "VENT-2026-0002"],
-    initialPassword: "AFK-Rafi-Partner-2026!",
   },
   {
     id: "partner-tousif",
@@ -34,7 +42,6 @@ export const INITIAL_FOUNDING_PARTNERS = [
     email: "tousif@afktheory.com",
     role: "PARTNER",
     permittedVentureIds: ["VENT-2026-0001"],
-    initialPassword: "AFK-Tousif-Partner-2026!",
   },
   {
     id: "partner-midhat",
@@ -42,7 +49,6 @@ export const INITIAL_FOUNDING_PARTNERS = [
     email: "midhat@afktheory.com",
     role: "PARTNER",
     permittedVentureIds: ["VENT-2026-0001"],
-    initialPassword: "AFK-Midhat-Partner-2026!",
   },
   {
     id: "partner-mueid",
@@ -50,6 +56,5 @@ export const INITIAL_FOUNDING_PARTNERS = [
     email: "mueid@afktheory.com",
     role: "PARTNER",
     permittedVentureIds: ["VENT-2026-0002"],
-    initialPassword: "AFK-Mueid-Partner-2026!",
   },
 ];
