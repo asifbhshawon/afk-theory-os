@@ -3,6 +3,7 @@ import { db } from "./db";
 import { portalPartners, portalSessions } from "./schema";
 import { eq, and, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { ensurePortalTablesExist } from "./migrate";
 import {
   PARTNER_SESSION_COOKIE,
   SESSION_TTL_HOURS,
@@ -40,6 +41,8 @@ let partnersInitialized = false;
 export async function ensurePortalPartnersInitialized() {
   if (partnersInitialized) return;
   try {
+    await ensurePortalTablesExist();
+
     for (const p of INITIAL_FOUNDING_PARTNERS) {
       const [existing] = await db
         .select()
