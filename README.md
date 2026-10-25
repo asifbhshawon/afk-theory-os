@@ -1,4 +1,4 @@
-# AFK THEORY Business OS
+# AFK THEORY Business OS 
 
 > **Fully Local, Production-Grade Apparel Business Management & Double-Entry Accounting System**
 
