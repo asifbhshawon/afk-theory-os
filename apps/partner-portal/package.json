@@ -1,0 +1,40 @@
+{
+  "name": "@afk/partner-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AFK THEORY Partner Portal - Executive Cloud View & Collaboration",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "dotenv": "^18.0.8",
+    "drizzle-orm": "^0.45.4",
+    "geist": "^1.8.2",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.61.0",
+    "next": "15.5.28",
+    "pg": "^8.23.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "sharp": "^0.35.5",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@fontsource/noto-sans-bengali": "^5.3.0",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.31",
+    "tailwindcss": "3.4.17",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.5"
+  }
+}
