@@ -225,6 +225,11 @@ export async function ensurePortalTablesExist() {
     );
   `;
 
-  await pool.query(ddl);
-  tablesInitialized = true;
+  try {
+    await pool.query(ddl);
+    tablesInitialized = true;
+  } catch (err) {
+    console.error("[Migration Error] Failed to ensure portal tables:", err);
+    throw err;
+  }
 }

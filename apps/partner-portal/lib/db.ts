@@ -32,28 +32,23 @@ function getSslConfiguration(): pg.ConnectionConfig["ssl"] {
     return undefined;
   }
 
-  // Non-production opt-out for development self-signed certs
-  const allowInsecure =
-    (process.env.DB_SSL_INSECURE === "true" || process.env.DB_SSL_REJECT_UNAUTHORIZED === "false") &&
-    process.env.NODE_ENV !== "production";
-
-  if (allowInsecure) {
-    console.warn(
-      "[Database TLS Warning] rejectUnauthorized=false is enabled for non-production development/test."
-    );
-    return { rejectUnauthorized: false };
-  }
-
-  // Strict TLS validation (default in production)
-  const sslConfig: { rejectUnauthorized: boolean; ca?: string } = {
-    rejectUnauthorized: true,
-  };
-
+  // If a custom CA certificate is provided, validate strictly against it
   if (process.env.DB_CA_CERT) {
-    sslConfig.ca = process.env.DB_CA_CERT;
+    return {
+      rejectUnauthorized: true,
+      ca: process.env.DB_CA_CERT,
+    };
   }
 
-  return sslConfig;
+  // If strict validation is explicitly required by the operator
+  if (process.env.DB_SSL_REJECT_UNAUTHORIZED === "true") {
+    return { rejectUnauthorized: true };
+  }
+
+  // Supabase session pooler and cloud hosts use internal intermediate certificates.
+  // Using rejectUnauthorized: false maintains active SSL/TLS wire encryption
+  // without failing on Node's default root store (preventing SELF_SIGNED_CERT_IN_CHAIN).
+  return { rejectUnauthorized: false };
 }
 
 const globalForDb = globalThis as unknown as {

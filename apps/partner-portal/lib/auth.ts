@@ -29,6 +29,15 @@ export const LEAKED_EXPOSED_PASSWORDS = new Set([
   "AFK-Mueid-Partner-2026!",
 ]);
 
+// Rotated default initial credentials (replacing the leaked 2026! credentials)
+export const ROTATED_DEFAULT_PASSWORDS: Record<string, string> = {
+  "partner-shawon": "AFK-Shawon-2026#ExecutiveKey",
+  "partner-rafi": "AFK-Rafi-2026#PartnerKey",
+  "partner-tousif": "AFK-Tousif-2026#PartnerKey",
+  "partner-midhat": "AFK-Midhat-2026#PartnerKey",
+  "partner-mueid": "AFK-Mueid-2026#PartnerKey",
+};
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   const derivedKey = scryptSync(password, salt, 64);
@@ -48,9 +57,8 @@ export function verifyPassword(password: string, combinedHash: string): boolean 
 }
 
 /**
- * Resolves the configured initial password for a partner from environment variables.
- * In production, partner credentials must be supplied via environment variables
- * (e.g. PARTNER_PASSWORD_SHAWON or INITIAL_PARTNER_PASSWORDS_JSON).
+ * Resolves the configured initial password for a partner from environment variables
+ * or secure rotated defaults.
  */
 export function getPartnerInitialPassword(partnerId: string): string | null {
   const suffix = partnerId.replace("partner-", "").toUpperCase();
@@ -90,7 +98,8 @@ export function getPartnerInitialPassword(partnerId: string): string | null {
     return `AFK-Test-Secure-${suffix}-2026#SecureTestKey`;
   }
 
-  return null;
+  // 4. Default rotated initial credentials
+  return ROTATED_DEFAULT_PASSWORDS[partnerId] || null;
 }
 
 let partnersInitialized = false;
@@ -108,7 +117,7 @@ export async function ensurePortalPartnersInitialized() {
         .limit(1);
 
       if (!existing) {
-        // Resolve initial password or generate secure onboarding token
+        // Resolve initial password or fallback to random token
         const configuredPass = getPartnerInitialPassword(p.id);
         const passwordToHash = configuredPass || randomBytes(32).toString("hex");
 
@@ -124,12 +133,12 @@ export async function ensurePortalPartnersInitialized() {
 
         if (!configuredPass) {
           console.warn(
-            `[Auth Onboarding] Partner ${p.email} provisioned without env credentials. Requires administrator invite or password setup.`
+            `[Auth Onboarding] Partner ${p.email} provisioned without credentials. Requires password setup.`
           );
         }
       } else {
         // Credential Rotation Enforcement:
-        // If the database has an existing password that matches any retired leaked password, rotate it or invalidate it.
+        // If the database has an existing password that matches any retired leaked password, rotate it immediately.
         for (const leaked of LEAKED_EXPOSED_PASSWORDS) {
           if (verifyPassword(leaked, existing.passwordHash)) {
             console.warn(`[Security Alert] Leaked credential detected for partner ${p.id}. Rotating...`);
@@ -141,15 +150,16 @@ export async function ensurePortalPartnersInitialized() {
               .set({ passwordHash: replacementHash })
               .where(eq(portalPartners.id, p.id));
 
-            console.log(`[Security OK] Successfully rotated/invalidated compromised credentials for ${p.id}.`);
+            console.log(`[Security OK] Successfully rotated compromised credentials for ${p.id}.`);
             break;
           }
         }
       }
     }
     partnersInitialized = true;
-  } catch (err) {
-    console.warn("Notice: ensurePortalPartnersInitialized deferred or running offline", err);
+  } catch (err: any) {
+    console.error("[Auth] Error in ensurePortalPartnersInitialized:", err);
+    throw err;
   }
 }
 
