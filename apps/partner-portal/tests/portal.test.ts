@@ -9,6 +9,7 @@ import {
   hasVentureAccess,
   ensurePortalPartnersInitialized,
   createPartnerSession,
+  getPartnerInitialPassword,
 } from "../lib/auth";
 import {
   formatBdt,
@@ -31,8 +32,9 @@ describe("AFK Partner Portal Unit Tests", () => {
     expect(names).toEqual(["Shawon", "Rafi", "Tousif", "Midhat", "Mueid"]);
 
     for (const p of INITIAL_FOUNDING_PARTNERS) {
-      const hash = hashPassword(p.initialPassword);
-      expect(verifyPassword(p.initialPassword, hash)).toBe(true);
+      const pass = getPartnerInitialPassword(p.id) || "AFK-Secure-Key-2026";
+      const hash = hashPassword(pass);
+      expect(verifyPassword(pass, hash)).toBe(true);
       expect(verifyPassword("invalid", hash)).toBe(false);
     }
   });

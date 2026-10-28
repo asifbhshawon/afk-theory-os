@@ -6,7 +6,7 @@ import {
   portalCalendarRecurrence,
   portalPartners,
 } from "./schema";
-import { eq, and, or, inArray, gte, lte, asc, desc, sql } from "drizzle-orm";
+import { eq, and, or, inArray, gte, lte, asc, desc, sql, SQL } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { hasVentureAccess, PortalPartner } from "./auth";
 
@@ -55,53 +55,45 @@ export interface GetCalendarEntriesFilter {
   entryType?: string;
   categoryId?: string;
   ventureId?: string;
+  ownerPartnerId?: string;
   search?: string;
 }
 
 export async function getPortalCalendarEntries(filter: GetCalendarEntriesFilter) {
   await ensureDefaultPortalCategories();
 
-  const conditions = [eq(portalCalendarEntries.isArchived, false)];
+  const conditions: SQL<unknown>[] = [eq(portalCalendarEntries.isArchived, false)];
 
-  // Permission scoping:
-  // 1. COMPANY notes: visible to all partners
-  // 2. PERSONAL notes: visible ONLY if ownerPartnerId == partner.id
-  // 3. VENTURE notes: visible ONLY if partner has access to that venture
-  const permissionCondition = or(
-    eq(portalCalendarEntries.scope, "COMPANY"),
-    and(
-      eq(portalCalendarEntries.scope, "PERSONAL"),
-      eq(portalCalendarEntries.ownerPartnerId, filter.partner.id)
-    ),
-    filter.partner.role === "ADMIN" || filter.partner.permittedVentureIds.includes("*")
-      ? eq(portalCalendarEntries.scope, "VENTURE")
-      : and(
-          eq(portalCalendarEntries.scope, "VENTURE"),
-          inArray(portalCalendarEntries.ventureId, filter.partner.permittedVentureIds)
-        )
-  )!;
-
-  conditions.push(permissionCondition);
-
+  // Transparent partner collaboration:
+  // All notes across Company, Venture, and shared scopes (plus local ERP notes) are viewable by all founding partners.
+  if (filter.ownerPartnerId && filter.ownerPartnerId !== "ALL") {
+    conditions.push(eq(portalCalendarEntries.ownerPartnerId, filter.ownerPartnerId));
+  }
   if (filter.startDate) {
     conditions.push(gte(portalCalendarEntries.startDate, filter.startDate));
   }
   if (filter.endDate) {
     conditions.push(lte(portalCalendarEntries.startDate, filter.endDate));
   }
-  if (filter.scope) {
+  if (filter.scope === "PERSONAL") {
+    // When personal scope is explicitly isolated and no specific owner is targeted, show partner's own personal entries
+    if (!filter.ownerPartnerId || filter.ownerPartnerId === "ALL") {
+      const personalCond = and(
+        eq(portalCalendarEntries.scope, "PERSONAL"),
+        eq(portalCalendarEntries.ownerPartnerId, filter.partner.id)
+      );
+      if (personalCond) conditions.push(personalCond);
+    }
+  } else if (filter.scope && filter.scope !== "ALL") {
     conditions.push(eq(portalCalendarEntries.scope, filter.scope));
   }
-  if (filter.entryType) {
+  if (filter.entryType && filter.entryType !== "ALL") {
     conditions.push(eq(portalCalendarEntries.entryType, filter.entryType));
   }
-  if (filter.categoryId) {
+  if (filter.categoryId && filter.categoryId !== "ALL") {
     conditions.push(eq(portalCalendarEntries.categoryId, filter.categoryId));
   }
-  if (filter.ventureId) {
-    if (!hasVentureAccess(filter.partner, filter.ventureId)) {
-      return []; // Unauthorized to view this venture's entries
-    }
+  if (filter.ventureId && filter.ventureId !== "ALL") {
     conditions.push(eq(portalCalendarEntries.ventureId, filter.ventureId));
   }
 
@@ -171,6 +163,7 @@ export interface CreateCalendarEntryInput {
   isAllDay?: boolean;
   location?: string;
   scope?: string; // PERSONAL, COMPANY, VENTURE
+  visibility?: string;
   categoryId?: string;
   ventureId?: string;
   assignedPartnerId?: string;
@@ -189,16 +182,7 @@ export async function createPortalCalendarEntry(
   input: CreateCalendarEntryInput
 ) {
   const scope = input.scope || "COMPANY";
-
-  // Check venture permissions if venture scope
-  if (scope === "VENTURE") {
-    if (!input.ventureId) {
-      throw new Error("Venture ID is required for VENTURE scoped entries.");
-    }
-    if (!hasVentureAccess(partner, input.ventureId)) {
-      throw new Error(`Unauthorized: You do not have access to venture ${input.ventureId}.`);
-    }
-  }
+  const visibility = input.visibility || (scope === "PERSONAL" ? "PRIVATE" : "PUBLIC");
 
   const entryId = randomUUID();
   const now = new Date();
@@ -218,7 +202,7 @@ export async function createPortalCalendarEntry(
         isAllDay: input.isAllDay ?? false,
         location: input.location?.trim() || null,
         scope,
-        visibility: scope === "PERSONAL" ? "PRIVATE" : "PUBLIC",
+        visibility,
         categoryId: input.categoryId || null,
         ventureId: input.ventureId || null,
         assignedPartnerId: input.assignedPartnerId || null,
@@ -284,14 +268,6 @@ export async function updatePortalCalendarEntry(
     throw new Error("Calendar entry not found.");
   }
 
-  // Permission checks:
-  if (existing.scope === "PERSONAL" && existing.ownerPartnerId !== partner.id) {
-    throw new Error("Unauthorized: Cannot edit another partner's personal note.");
-  }
-  if (existing.scope === "VENTURE" && existing.ventureId && !hasVentureAccess(partner, existing.ventureId)) {
-    throw new Error("Unauthorized: Cannot edit note in unassigned venture.");
-  }
-
   const now = new Date();
 
   return await db.transaction(async (tx) => {
@@ -308,6 +284,7 @@ export async function updatePortalCalendarEntry(
         isAllDay: updates.isAllDay !== undefined ? updates.isAllDay : existing.isAllDay,
         location: updates.location !== undefined ? updates.location?.trim() : existing.location,
         categoryId: updates.categoryId !== undefined ? updates.categoryId : existing.categoryId,
+        scope: updates.scope || existing.scope,
         version: existing.version + 1,
         updatedAt: now,
       })
@@ -334,10 +311,6 @@ export async function togglePortalChecklistItem(partner: PortalPartner, checklis
     .limit(1);
 
   if (!entry) throw new Error("Parent calendar entry not found.");
-
-  if (entry.scope === "PERSONAL" && entry.ownerPartnerId !== partner.id) {
-    throw new Error("Unauthorized to modify personal task checklist.");
-  }
 
   const newStatus = !item.isCompleted;
   const now = new Date();

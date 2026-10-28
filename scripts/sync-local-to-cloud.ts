@@ -42,6 +42,21 @@ async function syncExactLocalToCloud() {
     .from(calendarEntries)
     .where(eq(calendarEntries.isArchived, false));
 
+  const localCategoriesRes = await db.query.calendarCategories ? await db.select().from(require("../src/db/schema").calendarCategories) : [];
+  const slugToCloudCatId: Record<string, string> = {
+    production: "cat-prod",
+    finance: "cat-fin",
+    "partner-meeting": "cat-meet",
+    supplier: "cat-sup",
+    "sales-delivery": "cat-sales",
+    marketing: "cat-mkt",
+    photoshoot: "cat-photo",
+    "product-launch": "cat-drop",
+    design: "cat-dsgn",
+    personal: "cat-pers",
+    general: "cat-gen",
+  };
+
   const allPartners = await db.select().from(partners);
   console.log("- Real Local Calendar Notes count:", localCalendarNotes.length);
 
@@ -342,13 +357,16 @@ async function syncExactLocalToCloud() {
         ? `partner-${ownerPartner.name.toLowerCase()}`
         : "partner-shawon";
 
+      const matchedCat = (localCategoriesRes as any[]).find((c) => c.id === cn.categoryId);
+      const cloudCatId = (matchedCat && slugToCloudCatId[matchedCat.slug]) ? slugToCloudCatId[matchedCat.slug] : "cat-prod";
+
       await client.query(
         `INSERT INTO portal_calendar_entries (
           id, title, description, entry_type, status, priority,
           start_date, end_date, is_all_day, location, scope, visibility,
-          owner_partner_id, version, origin, is_archived, created_at, updated_at
+          category_id, owner_partner_id, version, origin, is_archived, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, 'LOCAL_ERP', false, $14, $14
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1, 'LOCAL_ERP', false, $15, $15
         ) ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title,
           description = EXCLUDED.description,
@@ -361,6 +379,7 @@ async function syncExactLocalToCloud() {
           location = EXCLUDED.location,
           scope = EXCLUDED.scope,
           visibility = EXCLUDED.visibility,
+          category_id = EXCLUDED.category_id,
           owner_partner_id = EXCLUDED.owner_partner_id,
           updated_at = EXCLUDED.updated_at;`,
         [
@@ -376,6 +395,7 @@ async function syncExactLocalToCloud() {
           cn.location,
           cn.scope,
           cn.visibility,
+          cloudCatId,
           ownerPartnerId,
           now,
         ]

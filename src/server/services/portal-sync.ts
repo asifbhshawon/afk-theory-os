@@ -21,6 +21,157 @@ import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { getFinancialStatements } from "./finance";
 import { createHash } from "crypto";
 
+
+// Extract rich partner settlement & distribution history from posted GL entries
+async function buildPartnerSettlementHistories(allPartners: any[], statements: any) {
+  const allLines = await db
+    .select({
+      lineId: journalLines.id,
+      debit: journalLines.debit,
+      credit: journalLines.credit,
+      memo: journalLines.memo,
+      partnerId: journalLines.partnerId,
+      accountId: accounts.id,
+      accountName: accounts.name,
+      accountCode: accounts.code,
+      accountGroup: accounts.group,
+      journalId: journalEntries.id,
+      entryNumber: journalEntries.entryNumber,
+      entryType: journalEntries.entryType,
+      journalDate: journalEntries.date,
+      journalDescription: journalEntries.description,
+      sourceModule: journalEntries.sourceModule,
+    })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+    .innerJoin(accounts, eq(journalLines.accountId, accounts.id))
+    .where(eq(journalEntries.status, "POSTED"))
+    .orderBy(desc(journalEntries.date), desc(journalEntries.entryNumber));
+
+  const entriesMap = new Map<string, { entry: any; lines: any[] }>();
+  for (const line of allLines) {
+    if (!entriesMap.has(line.journalId)) {
+      entriesMap.set(line.journalId, {
+        entry: {
+          id: line.journalId,
+          entryNumber: line.entryNumber,
+          entryType: line.entryType,
+          date: line.journalDate,
+          description: line.journalDescription,
+          sourceModule: line.sourceModule,
+        },
+        lines: [],
+      });
+    }
+    entriesMap.get(line.journalId)!.lines.push(line);
+  }
+
+  const result: Record<string, any[]> = {};
+
+  for (const p of allPartners) {
+    const pId = `partner-${p.name.toLowerCase()}`;
+    const history: any[] = [];
+
+    for (const { entry: j, lines } of entriesMap.values()) {
+      const matchingLines = lines.filter(
+        (l) =>
+          l.partnerId === p.id ||
+          l.accountName.includes(p.name) ||
+          (l.memo && l.memo.toLowerCase().includes(p.name.toLowerCase()))
+      );
+
+      if (matchingLines.length > 0) {
+        const partnerLine =
+          matchingLines.find(
+            (l) =>
+              l.accountGroup === "CAPITAL" ||
+              l.accountGroup === "DRAWINGS" ||
+              l.accountName.startsWith("Due to")
+          ) || matchingLines[0];
+
+        const contraLine = lines.find((l) => l.lineId !== partnerLine.lineId) || partnerLine;
+
+        let type = "SETTLEMENT";
+        let typeLabel = "Partner Settlement";
+        let amount = parseFloat(partnerLine.credit) > 0 ? parseFloat(partnerLine.credit) : parseFloat(partnerLine.debit);
+        let isCredit = true;
+
+        if (partnerLine.accountGroup === "CAPITAL" || j.entryType === "CAPITAL_DEPOSIT") {
+          type = "CAPITAL_DEPOSIT";
+          typeLabel = "Capital Contribution";
+          amount = parseFloat(partnerLine.credit) || parseFloat(partnerLine.debit);
+          isCredit = true;
+        } else if (partnerLine.accountGroup === "DRAWINGS" || j.entryType === "DRAWING") {
+          type = "DRAWING";
+          typeLabel = "Personal Drawing";
+          amount = parseFloat(partnerLine.debit) || parseFloat(partnerLine.credit);
+          isCredit = false;
+        } else if (partnerLine.accountName.startsWith("Due to") || partnerLine.accountCode === "2110") {
+          if (parseFloat(partnerLine.debit) > 0) {
+            type = "LOAN_REVERSAL";
+            typeLabel = "Loan Reversal";
+            amount = parseFloat(partnerLine.debit);
+            isCredit = false;
+          } else {
+            type = "LOAN_ADVANCE";
+            typeLabel = "Reimbursable Loan Advance";
+            amount = parseFloat(partnerLine.credit);
+            isCredit = true;
+          }
+        }
+
+        const paymentMethod = contraLine.accountName.includes("Bank")
+          ? "BRAC Bank Checking"
+          : contraLine.accountName.includes("Cash")
+          ? "Cash on Hand"
+          : contraLine.accountName;
+
+        history.push({
+          id: partnerLine.lineId,
+          date: j.date.toISOString(),
+          partnerId: pId,
+          partnerName: p.name,
+          type,
+          typeLabel,
+          description: j.description || `${typeLabel} - ${p.name}`,
+          memo: partnerLine.memo || j.description,
+          journalNumber: j.entryNumber,
+          accountName: partnerLine.accountName,
+          paymentMethod,
+          amount,
+          isCredit,
+          status: "CONFIRMED",
+        });
+      }
+    }
+
+    const partnerStmt = statements.partnerStatements.find((s: any) => s.name === p.name);
+    const profitShareAmount = partnerStmt ? partnerStmt.shareOfProfit : 0;
+
+    history.push({
+      id: `profit-share-${pId}`,
+      date: new Date("2026-10-26T00:00:00.000Z").toISOString(),
+      partnerId: pId,
+      partnerName: p.name,
+      type: "PROFIT_SHARE",
+      typeLabel: `Net Profit / Loss Share (${p.profitSharePct}%)`,
+      description: `Authoritative ${p.profitSharePct}% General Ledger Operating Deficit / Profit Allocation`,
+      memo: `Allocated general ledger income share based on posted trial balance`,
+      journalNumber: "GL-ALLOC-OCT2026",
+      accountName: "Current Earnings / Retained Deficit",
+      paymentMethod: "General Ledger P&L",
+      amount: profitShareAmount,
+      isCredit: profitShareAmount >= 0,
+      status: "CONFIRMED",
+    });
+
+    history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    result[pId] = history;
+  }
+
+  return result;
+}
+
 export interface PortalSyncResult {
   success: boolean;
   timestamp: string;
@@ -69,9 +220,11 @@ export async function buildSanitizedPushPayload() {
 
   // 3. Partner financial statements (all 5 partners)
   const allPartners = await db.select().from(partners);
+  const settlementHistories = await buildPartnerSettlementHistories(allPartners, statements);
   const partnerStatements = statements.partnerStatements.map((ps) => {
+    const pId = `partner-${ps.name.toLowerCase()}`;
     return {
-      partnerId: `partner-${ps.name.toLowerCase()}`,
+      partnerId: pId,
       name: ps.name,
       email: `${ps.name.toLowerCase()}@afktheory.com`,
       ownershipPct: ps.ownershipPct,
@@ -83,7 +236,7 @@ export async function buildSanitizedPushPayload() {
       totalEquity: ps.totalEquity,
       ventureContributions: 0,
       ventureEntitlements: 0,
-      settlementHistory: [],
+      settlementHistory: settlementHistories[pId] || [],
     };
   });
 

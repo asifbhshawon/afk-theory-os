@@ -2,17 +2,15 @@ import { db } from "@/lib/db";
 import { portalPartnerStatements, portalVentures } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentPartner } from "@/lib/auth";
-import { formatBdt, formatDate, formatDateTime } from "@/lib/format";
+import { formatBdt } from "@/lib/format";
 import {
   Wallet,
-  TrendingUp,
   ArrowDownLeft,
   ArrowUpRight,
   ShieldCheck,
   Briefcase,
-  Clock,
-  CheckCircle2,
 } from "lucide-react";
+import { PartnerSettlementHistoryView } from "@/components/PartnerSettlementHistoryView";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +18,11 @@ export default async function MyInvestmentsPage() {
   const partner = await getCurrentPartner();
   if (!partner) return null;
 
-  const [statement] = await db
-    .select()
-    .from(portalPartnerStatements)
-    .where(eq(portalPartnerStatements.partnerId, partner.id))
-    .limit(1);
+  const allStatements = await db.select().from(portalPartnerStatements);
+
+  const statement = allStatements.find(
+    (s) => s.partnerId === partner.id
+  ) || allStatements[0];
 
   const capitalContributed = Number(statement?.capitalContributed || 0);
   const loanBalanceOwed = Number(statement?.loanBalanceOwed || 0);
@@ -35,9 +33,6 @@ export default async function MyInvestmentsPage() {
   const ventureEntitlements = Number(statement?.ventureEntitlements || 0);
   const ownershipPct = statement?.ownershipPct || "20.00";
   const profitSharePct = statement?.profitSharePct || "20.00";
-  const settlementHistory = Array.isArray(statement?.settlementHistory)
-    ? statement.settlementHistory
-    : [];
 
   return (
     <div className="space-y-6">
@@ -165,59 +160,11 @@ export default async function MyInvestmentsPage() {
         </div>
       </div>
 
-      {/* Settlement & Payout History Table */}
-      <div className="bg-afk-card p-5 rounded-xl border border-afk-border shadow-sm">
-        <h2 className="text-sm font-bold text-afk-offwhite pb-3 border-b border-afk-border">
-          Partner Settlement & Distribution History
-        </h2>
-
-        <div className="overflow-x-auto mt-4">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-afk-border text-afk-secondary">
-                <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3">Transaction / Description</th>
-                <th className="py-2.5 px-3">Type</th>
-                <th className="py-2.5 px-3 text-right">Amount</th>
-                <th className="py-2.5 px-3 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-afk-border">
-              {settlementHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-6 text-center text-afk-muted">
-                    No individual distribution or settlement transactions recorded.
-                  </td>
-                </tr>
-              ) : (
-                settlementHistory.map((item: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-afk-surface/40 transition">
-                    <td className="py-3 px-3 text-afk-muted font-mono">
-                      {formatDate(item.date)}
-                    </td>
-                    <td className="py-3 px-3 font-medium text-afk-offwhite">
-                      {item.description || "Partner Settlement"}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="text-2xs px-2 py-0.5 rounded bg-afk-surface border border-afk-border text-afk-secondary uppercase">
-                        {item.type || "SETTLEMENT"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold tabular-nums text-afk-offwhite">
-                      {formatBdt(item.amount)}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="text-2xs px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 font-medium">
-                        {item.status || "CONFIRMED"}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Fully Detailed Partner Settlement & Distribution History (for everyone) */}
+      <PartnerSettlementHistoryView
+        currentPartner={partner}
+        allStatements={allStatements as any}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const entryType = searchParams.get("entryType") || undefined;
     const categoryId = searchParams.get("categoryId") || undefined;
     const ventureId = searchParams.get("ventureId") || undefined;
+    const ownerPartnerId = searchParams.get("ownerPartnerId") || undefined;
     const startStr = searchParams.get("startDate");
     const endStr = searchParams.get("endDate");
 
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
       entryType,
       categoryId,
       ventureId,
+      ownerPartnerId,
       startDate: startStr ? new Date(startStr) : undefined,
       endDate: endStr ? new Date(endStr) : undefined,
     });
