@@ -15,8 +15,10 @@ import {
   HelpCircle,
   Clock,
   ArrowRight,
+  Cloud,
 } from "lucide-react";
 import { BackupButton } from "@/components/BackupButton";
+import { SyncPortalButton } from "@/components/SyncPortalButton";
 
 interface BackupItem {
   id: string;
@@ -159,6 +161,26 @@ export function SettingsClientView({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Cloud Partner Portal Synchronization */}
+      <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-5 h-5 text-sky-400" />
+            <h2 className="text-base font-bold text-afk-offwhite">
+              Cloud Partner Portal Synchronization
+            </h2>
+          </div>
+          <span className="text-2xs font-mono uppercase px-2 py-0.5 rounded bg-afk-surface border border-afk-border text-afk-secondary">
+            Decoupled Read Model
+          </span>
+        </div>
+        <p className="text-xs text-afk-secondary leading-relaxed">
+          Pushes an authoritative, sanitized snapshot of liquid cash, partner statements (with settlement history), payment accounts, and calendar notes to the cloud database on Supabase so partners can view their positions on <a href="https://afk-theory-os.vercel.app" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">afk-theory-os.vercel.app</a>.
+        </p>
+
+        <SyncPortalButton variant="card" />
       </div>
 
       {/* Backup Execution Panel & Recovery Instructions */}

@@ -16,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { CommandPalette } from "@/components/CommandPalette";
+import { SyncPortalButton } from "@/components/SyncPortalButton";
 
 interface HeaderClientProps {
   user: {
@@ -102,6 +103,9 @@ export function HeaderClient({ user, todayFormatted, onLogout }: HeaderClientPro
             <Calendar className="w-4 h-4 text-afk-olive-accent" />
             <span className="hidden sm:inline">{todayFormatted}</span>
           </Link>
+
+          {/* Sync to Cloud Partner Portal */}
+          <SyncPortalButton variant="header" />
 
           {/* Quick Add Dropdown */}
           <div className="relative">

@@ -28,6 +28,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SyncPortalButton } from "@/components/SyncPortalButton";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,7 @@ export default async function DashboardPage() {
             <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
             <span>+ Sales Order</span>
           </Link>
+          <SyncPortalButton variant="quick-action" />
         </div>
       </div>
 
