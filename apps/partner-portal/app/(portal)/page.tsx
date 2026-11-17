@@ -307,7 +307,7 @@ export default async function OverviewPage({
         </Card>
 
         <Card>
-          <CardHeader title="Latest orders" subtitle="Newest first" icon={ShoppingBag} iconClass="text-sky-300" />
+          <CardHeader title="Latest orders" subtitle="Newest first" icon={ShoppingBag} iconClass="text-sky-300" href="/sales" />
           <div className="px-5 pb-5">
             {recentOrders.length === 0 ? (
               <EmptyState icon={ShoppingBag} title="No orders synced yet" className="py-6" />
@@ -336,7 +336,7 @@ export default async function OverviewPage({
         </Card>
 
         <Card>
-          <CardHeader title="Money movements" subtitle="Deposits, expenses, payouts" icon={Banknote} iconClass="text-afk-olive-accent" />
+          <CardHeader title="Money movements" subtitle="Deposits, expenses, payouts" icon={Banknote} iconClass="text-afk-olive-accent" href="/money" />
           <div className="px-5 pb-5">
             {recentMoney.length === 0 ? (
               <EmptyState icon={Banknote} title="No transactions synced yet" className="py-6" />

@@ -1,5 +1,7 @@
 import {
   LayoutDashboard,
+  ShoppingBag,
+  Banknote,
   Wallet,
   Briefcase,
   Bell,
@@ -30,18 +32,20 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Business",
     items: [
       { href: "/", label: "Overview", icon: LayoutDashboard, mobilePrimary: true },
+      { href: "/sales", label: "Sales & Orders", shortLabel: "Sales", icon: ShoppingBag, mobilePrimary: true },
+      { href: "/money", label: "Money & Cash Flow", shortLabel: "Money", icon: Banknote, mobilePrimary: true },
       { href: "/updates", label: "Business Updates", shortLabel: "Updates", icon: Bell },
     ],
   },
   {
     title: "Projects",
-    items: [{ href: "/ventures", label: "Ventures", icon: Briefcase, mobilePrimary: true }],
+    items: [{ href: "/ventures", label: "Ventures", icon: Briefcase }],
   },
   {
     title: "My Space",
     items: [
       { href: "/my-investments", label: "My Investments", shortLabel: "Mine", icon: Wallet, mobilePrimary: true },
-      { href: "/calendar", label: "Calendar & Notes", shortLabel: "Calendar", icon: Calendar, mobilePrimary: true },
+      { href: "/calendar", label: "Calendar & Notes", shortLabel: "Calendar", icon: Calendar },
       { href: "/reports", label: "Reports", icon: FileText },
     ],
   },

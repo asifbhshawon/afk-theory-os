@@ -39,13 +39,15 @@ export function AreaChart({
   ariaLabel?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(640);
+  // null until measured: the chart is drawn client-side at the real width (no oversized first frame)
+  const [measured, setMeasured] = useState<number | null>(null);
+  const width = measured ?? 320;
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () => setWidth(Math.max(260, Math.round(el.clientWidth)));
+    const update = () => setMeasured(Math.max(260, Math.round(el.clientWidth)));
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -91,7 +93,8 @@ export function AreaChart({
   const tipLeft = Math.min(Math.max(M.left + hx - 90, 4), Math.max(4, width - 184));
 
   return (
-    <div ref={wrapRef} className="relative w-full select-none" style={{ height }}>
+    <div ref={wrapRef} className="relative w-full select-none overflow-hidden" style={{ height }}>
+      {measured !== null && (
       <svg width={width} height={height} role="img" aria-label={ariaLabel} className="block overflow-visible">
         <defs>
           {series.map((s) => (
@@ -169,6 +172,7 @@ export function AreaChart({
           />
         </g>
       </svg>
+      )}
 
       {hover !== null && hasAnyData && (
         <div
