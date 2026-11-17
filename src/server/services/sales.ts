@@ -13,8 +13,14 @@ import {
   returnsAndExchanges,
   productVariants,
 } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
+import { products, auditLogs } from "@/db/schema";
 import { postJournalEntry } from "./finance";
+
+// Status flow: CONFIRMED -> SHIPPED -> DELIVERED -> (RETURNED)
+//              CONFIRMED | SHIPPED -> CANCELLED (reservation released)
+export const SHIPPABLE_STATUSES = ["CONFIRMED", "PACKED"];
+export const CANCELLABLE_STATUSES = ["CONFIRMED", "PACKED", "SHIPPED"];
 
 export interface CreateOrderLineInput {
   variantId: string;
@@ -60,12 +66,26 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
     throw new Error("Order must contain at least one line item.");
   }
 
-  // Idempotency check
-  if (input.idempotencyKey) {
+  for (const line of input.lines) {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new Error("Quantity must be a whole number greater than zero.");
+    }
+    if (!Number.isFinite(line.unitPrice) || line.unitPrice < 0) {
+      throw new Error("Unit price cannot be negative.");
+    }
+  }
+  if ((input.deliveryCharge ?? 0) < 0 || (input.discount ?? 0) < 0) {
+    throw new Error("Delivery charge and discount cannot be negative.");
+  }
+
+  // Idempotency check (key is stored as the first line of `notes`,
+  // so a user note can live alongside it)
+  const idemTag = input.idempotencyKey ? `IDEMPOTENCY:${input.idempotencyKey}` : null;
+  if (idemTag) {
     const [existingOrder] = await db
       .select()
       .from(salesOrders)
-      .where(eq(salesOrders.notes, `IDEMPOTENCY:${input.idempotencyKey}`))
+      .where(like(salesOrders.notes, `${idemTag}%`))
       .limit(1);
 
     if (existingOrder) {
@@ -143,8 +163,15 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
       }
 
       if (remainingToReserve > 0) {
+        const [v] = await tx
+          .select({ sku: productVariants.sku })
+          .from(productVariants)
+          .where(eq(productVariants.id, line.variantId))
+          .limit(1);
         throw new Error(
-          `Out of stock for SKU. Requested: ${line.quantity}, unavailable: ${remainingToReserve}`
+          `Not enough stock for ${v?.sku ?? "SKU"}. Requested ${line.quantity}, only ${
+            line.quantity - remainingToReserve
+          } available.`
         );
       }
     }
@@ -166,7 +193,11 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
         status: "CONFIRMED",
         paymentStatus: "COD_PENDING",
         paymentMethod: input.paymentMethod || "COD",
-        notes: input.idempotencyKey ? `IDEMPOTENCY:${input.idempotencyKey}` : input.notes,
+        notes: idemTag
+          ? input.notes
+            ? `${idemTag}\n${input.notes}`
+            : idemTag
+          : input.notes,
         createdByUserId: input.userId,
       })
       .returning();
@@ -202,6 +233,13 @@ export async function shipSalesOrder(data: {
     .where(eq(salesOrders.id, data.orderId))
     .limit(1);
   if (!order) throw new Error("Order not found.");
+  if (!SHIPPABLE_STATUSES.includes(order.status)) {
+    throw new Error(`Order ${order.orderNumber} is ${order.status} and cannot be shipped.`);
+  }
+  if (data.courierId) {
+    const [courier] = await db.select().from(contacts).where(eq(contacts.id, data.courierId)).limit(1);
+    if (!courier) throw new Error("Courier contact not found.");
+  }
 
   const [transitLoc] = await db.select().from(locations).where(eq(locations.code, "TRANSIT")).limit(1);
   const [mainWh] = await db.select().from(locations).where(eq(locations.code, "MAIN_WH")).limit(1);
@@ -212,7 +250,7 @@ export async function shipSalesOrder(data: {
       .set({
         status: "SHIPPED",
         courierId: data.courierId,
-        waybillNumber: data.waybillNumber,
+        waybillNumber: data.waybillNumber?.trim() || undefined,
       })
       .where(eq(salesOrders.id, order.id));
 
@@ -253,6 +291,11 @@ export async function deliverSalesOrderAndRecogniseRevenue(data: {
 
   if (order.status === "DELIVERED") {
     throw new Error("Order is already marked delivered.");
+  }
+  if (order.status !== "SHIPPED") {
+    throw new Error(
+      `Order ${order.orderNumber} is ${order.status}; only SHIPPED orders can be marked delivered.`
+    );
   }
 
   const lines = await db.select().from(salesLines).where(eq(salesLines.salesOrderId, order.id));
@@ -418,6 +461,30 @@ export async function settleCourierRemittance(data: {
     .limit(1);
   if (!payAcc) throw new Error("Payment account not found.");
 
+  if (data.settlements.length === 0) throw new Error("Select at least one order to settle.");
+  for (const s of data.settlements) {
+    if (!(s.codAmount > 0)) throw new Error("COD amount must be greater than zero.");
+    if (s.courierFee < 0 || s.courierFee > s.codAmount) {
+      throw new Error("Courier fee must be between zero and the COD amount.");
+    }
+  }
+  // Guard against double-settling (would clear courier receivables twice)
+  const settleOrders = await db
+    .select()
+    .from(salesOrders)
+    .where(inArray(salesOrders.id, data.settlements.map((s) => s.salesOrderId)));
+  for (const so of settleOrders) {
+    if (so.status !== "DELIVERED") {
+      throw new Error(`Order ${so.orderNumber} is ${so.status}; only delivered orders can be settled.`);
+    }
+    if (so.paymentStatus === "PAID") {
+      throw new Error(`Order ${so.orderNumber} is already settled.`);
+    }
+  }
+  if (settleOrders.length !== new Set(data.settlements.map((s) => s.salesOrderId)).size) {
+    throw new Error("One or more orders to settle were not found.");
+  }
+
   const [courierRecAcc] = await db.select().from(accounts).where(eq(accounts.code, "1120")).limit(1); // Courier Receivables
   const [courierFeeAcc] = await db.select().from(accounts).where(eq(accounts.code, "6010")).limit(1); // Courier Delivery & COD Fees
 
@@ -521,6 +588,16 @@ export async function processSalesReturn(data: {
     .where(eq(salesOrders.id, data.salesOrderId))
     .limit(1);
   if (!order) throw new Error("Order not found.");
+  if (order.status === "RETURNED") throw new Error(`Order ${order.orderNumber} was already returned.`);
+  if (order.status !== "DELIVERED") {
+    throw new Error(
+      `Order ${order.orderNumber} is ${order.status}. Only delivered orders can be returned — cancel it instead if it has not been delivered.`
+    );
+  }
+  if (!data.reason?.trim()) throw new Error("A return reason is required.");
+  if (!(data.refundAmount >= 0) || data.refundAmount > Number(order.totalAmount)) {
+    throw new Error(`Refund must be between ৳0 and the order total (৳${order.totalAmount}).`);
+  }
 
   const lines = await db.select().from(salesLines).where(eq(salesLines.salesOrderId, order.id));
 
@@ -696,5 +773,196 @@ export async function processReturnOrExchange(data: {
     paymentAccountId: data.paymentAccountId,
     userId: data.userId,
     notes: data.notes,
+  });
+}
+
+// Cancel an order that has not been delivered: releases the stock reservation.
+// - CONFIRMED / PACKED: stock never left the warehouse -> just release reservation.
+// - SHIPPED: goods are with the courier (no revenue booked yet) -> bring stock
+//   back from TRANSIT to MAIN_WH and release reservation.
+// Delivered orders must go through the return flow (revenue was recognised).
+export async function cancelSalesOrder(data: {
+  orderId: string;
+  reason: string;
+  userId?: string;
+}) {
+  const reason = data.reason?.trim();
+  if (!reason) throw new Error("A cancellation reason is required.");
+
+  const [order] = await db.select().from(salesOrders).where(eq(salesOrders.id, data.orderId)).limit(1);
+  if (!order) throw new Error("Order not found.");
+  if (order.status === "CANCELLED") throw new Error(`Order ${order.orderNumber} is already cancelled.`);
+  if (!CANCELLABLE_STATUSES.includes(order.status)) {
+    throw new Error(
+      order.status === "DELIVERED"
+        ? `Order ${order.orderNumber} is already delivered — use "Return" to reverse the sale.`
+        : `Order ${order.orderNumber} is ${order.status} and cannot be cancelled.`
+    );
+  }
+
+  const [transitLoc] = await db.select().from(locations).where(eq(locations.code, "TRANSIT")).limit(1);
+  const [mainWh] = await db.select().from(locations).where(eq(locations.code, "MAIN_WH")).limit(1);
+
+  return await db.transaction(async (tx) => {
+    const lines = await tx.select().from(salesLines).where(eq(salesLines.salesOrderId, order.id));
+
+    for (const line of lines) {
+      if (line.lotId) {
+        const [lot] = await tx
+          .select()
+          .from(inventoryLots)
+          .where(eq(inventoryLots.id, line.lotId))
+          .for("update");
+        if (lot) {
+          await tx
+            .update(inventoryLots)
+            .set({ reservedQuantity: Math.max(0, lot.reservedQuantity - line.quantity) })
+            .where(eq(inventoryLots.id, lot.id));
+        }
+      }
+
+      if (order.status === "SHIPPED" && transitLoc && mainWh) {
+        await tx.insert(stockMovements).values({
+          variantId: line.variantId,
+          lotId: line.lotId,
+          fromLocationId: transitLoc.id,
+          toLocationId: mainWh.id,
+          movementType: "TRANSFER",
+          quantity: line.quantity,
+          unitCost: line.cogsUnitCost,
+          referenceType: "ORDER",
+          referenceId: order.orderNumber,
+          performedByUserId: data.userId,
+          notes: `Order cancelled while with courier — stock returned to Main WH (${reason})`,
+        });
+      }
+    }
+
+    const cancelNote = `CANCELLED: ${reason}`;
+    await tx
+      .update(salesOrders)
+      .set({
+        status: "CANCELLED",
+        paymentStatus: "VOID",
+        notes: order.notes ? `${order.notes}\n${cancelNote}` : cancelNote,
+      })
+      .where(eq(salesOrders.id, order.id));
+
+    await tx.insert(auditLogs).values({
+      userId: data.userId,
+      action: "UPDATE",
+      entityType: "ORDER",
+      entityId: order.id,
+      details: `Order ${order.orderNumber} cancelled from ${order.status}: ${reason}`,
+      oldValues: { status: order.status },
+      newValues: { status: "CANCELLED" },
+    });
+
+    return { success: true, orderNumber: order.orderNumber, releasedUnits: lines.reduce((s, l) => s + l.quantity, 0) };
+  });
+}
+
+// Sellable catalogue for the quick-sale picker: price, cost and AVAILABLE stock
+// (on hand minus reserved across active lots).
+export async function listSellableVariants() {
+  const rows = await db
+    .select({
+      id: productVariants.id,
+      sku: productVariants.sku,
+      productName: products.name,
+      size: productVariants.size,
+      color: productVariants.color,
+      sellingPrice: productVariants.sellingPrice,
+      costPrice: productVariants.costPrice,
+      retailPrice: products.retailPrice,
+      available: sql<number>`COALESCE(SUM(${inventoryLots.currentQuantity} - ${inventoryLots.reservedQuantity}) FILTER (WHERE ${inventoryLots.status} = 'ACTIVE'), 0)::int`,
+    })
+    .from(productVariants)
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .leftJoin(inventoryLots, eq(inventoryLots.variantId, productVariants.id))
+    .where(
+      and(eq(products.status, "ACTIVE"), inArray(products.productType, ["FINISHED_GARMENT", "BLANK"]))
+    )
+    .groupBy(productVariants.id, products.name, products.retailPrice)
+    .orderBy(products.name, productVariants.sku);
+
+  return rows.map((r) => {
+    const selling = Number(r.sellingPrice);
+    return {
+      id: r.id,
+      sku: r.sku,
+      productName: r.productName,
+      size: r.size,
+      color: r.color,
+      price: selling > 0 ? selling : Number(r.retailPrice),
+      cost: Number(r.costPrice),
+      available: Math.max(0, Number(r.available)),
+    };
+  });
+}
+
+// Recent orders with their line items and gross profit, for the orders workspace.
+export async function listRecentOrdersWithItems(limit = 100) {
+  const orders = await db.select().from(salesOrders).orderBy(desc(salesOrders.orderDate)).limit(limit);
+  if (orders.length === 0) return [];
+
+  const lines = await db
+    .select({
+      salesOrderId: salesLines.salesOrderId,
+      quantity: salesLines.quantity,
+      unitPrice: salesLines.unitPrice,
+      totalPrice: salesLines.totalPrice,
+      cogsUnitCost: salesLines.cogsUnitCost,
+      sku: productVariants.sku,
+      size: productVariants.size,
+      color: productVariants.color,
+      productName: products.name,
+    })
+    .from(salesLines)
+    .innerJoin(productVariants, eq(salesLines.variantId, productVariants.id))
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .where(inArray(salesLines.salesOrderId, orders.map((o) => o.id)));
+
+  const couriers = await db.select({ id: contacts.id, name: contacts.name }).from(contacts).where(eq(contacts.type, "COURIER"));
+  const courierName = new Map(couriers.map((c) => [c.id, c.name]));
+
+  return orders.map((o) => {
+    const items = lines
+      .filter((l) => l.salesOrderId === o.id)
+      .map((l) => ({
+        sku: l.sku,
+        name: l.productName,
+        size: l.size,
+        color: l.color,
+        quantity: l.quantity,
+        unitPrice: Number(l.unitPrice),
+        total: Number(l.totalPrice),
+        cogs: l.quantity * Number(l.cogsUnitCost),
+      }));
+    const cogs = items.reduce((s, i) => s + i.cogs, 0);
+    const total = Number(o.totalAmount);
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber,
+      customerName: o.customerName,
+      customerPhone: o.customerPhone,
+      shippingAddress: o.shippingAddress,
+      cityZone: o.cityZone,
+      channel: o.channel,
+      orderDate: o.orderDate.toISOString(),
+      status: o.status,
+      paymentStatus: o.paymentStatus,
+      subtotal: Number(o.subtotal),
+      discount: Number(o.discount),
+      deliveryCharge: Number(o.deliveryCharge),
+      total,
+      courierId: o.courierId,
+      courierName: o.courierId ? courierName.get(o.courierId) ?? null : null,
+      waybillNumber: o.waybillNumber,
+      items,
+      units: items.reduce((s, i) => s + i.quantity, 0),
+      // Gross profit = goods revenue (after discount) - cost; delivery charge excluded
+      profit: total - Number(o.deliveryCharge) - cogs,
+    };
   });
 }

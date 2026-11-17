@@ -11,13 +11,15 @@ import {
   inventoryLots,
   productVariants,
   products,
+  salesOrders,
+  salesLines,
   auditLogs,
   calendarEntries,
   calendarChecklistItems,
   calendarRecurrenceRules,
   settings,
 } from "@/db/schema";
-import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNotNull } from "drizzle-orm";
 import { getFinancialStatements } from "./finance";
 import { createHash } from "crypto";
 
@@ -148,16 +150,18 @@ async function buildPartnerSettlementHistories(allPartners: any[], statements: a
     const partnerStmt = statements.partnerStatements.find((s: any) => s.name === p.name);
     const profitShareAmount = partnerStmt ? partnerStmt.shareOfProfit : 0;
 
+    const asOf = statements.asOfDate instanceof Date ? statements.asOfDate : new Date();
+    const allocRef = `GL-ALLOC-${asOf.getFullYear()}${String(asOf.getMonth() + 1).padStart(2, "0")}`;
     history.push({
       id: `profit-share-${pId}`,
-      date: new Date("2026-10-26T00:00:00.000Z").toISOString(),
+      date: asOf.toISOString(),
       partnerId: pId,
       partnerName: p.name,
       type: "PROFIT_SHARE",
       typeLabel: `Net Profit / Loss Share (${p.profitSharePct}%)`,
-      description: `Authoritative ${p.profitSharePct}% General Ledger Operating Deficit / Profit Allocation`,
+      description: `${p.profitSharePct}% share of ${profitShareAmount >= 0 ? "net profit" : "operating deficit"} per general ledger as of ${asOf.toISOString().slice(0, 10)}`,
       memo: `Allocated general ledger income share based on posted trial balance`,
-      journalNumber: "GL-ALLOC-OCT2026",
+      journalNumber: allocRef,
       accountName: "Current Earnings / Retained Deficit",
       paymentMethod: "General Ledger P&L",
       amount: profitShareAmount,
@@ -221,8 +225,14 @@ export async function buildSanitizedPushPayload() {
   // 3. Partner financial statements (all 5 partners)
   const allPartners = await db.select().from(partners);
   const settlementHistories = await buildPartnerSettlementHistories(allPartners, statements);
+  const allVentures = await db.select().from(ventures);
+  const allParticipants = await db.select().from(ventureParticipants);
   const partnerStatements = statements.partnerStatements.map((ps) => {
     const pId = `partner-${ps.name.toLowerCase()}`;
+    // Cash this partner has put into ventures (ps.partnerId is the local partner UUID)
+    const ventureContributionTotal = allParticipants
+      .filter((vp) => vp.partnerId === ps.partnerId)
+      .reduce((s, vp) => s + Number(vp.actualCashContributed || 0), 0);
     return {
       partnerId: pId,
       name: ps.name,
@@ -234,19 +244,64 @@ export async function buildSanitizedPushPayload() {
       loanBalanceOwed: ps.loanBalanceOwedByCompany,
       shareOfProfit: ps.shareOfProfit,
       totalEquity: ps.totalEquity,
-      ventureContributions: 0,
+      ventureContributions: ventureContributionTotal,
       ventureEntitlements: 0,
       settlementHistory: settlementHistories[pId] || [],
     };
   });
 
-  // 4. Ventures summary
-  const allVentures = await db.select().from(ventures);
-  const allParticipants = await db.select().from(ventureParticipants);
+  // 6b. COD value of orders currently with couriers (shipped, not yet delivered)
+  const [inTransit] = await db
+    .select({ total: sql<string>`COALESCE(SUM(${salesOrders.totalAmount}), 0)` })
+    .from(salesOrders)
+    .where(eq(salesOrders.status, "SHIPPED"));
+  const courierPendingSettlements = Number(inTransit?.total || 0);
 
+  // 6c. Venture sales / production progress and per-partner venture contributions
+  const ventureSales = await db
+    .select({
+      ventureId: salesLines.ventureId,
+      units: sql<number>`COALESCE(SUM(${salesLines.quantity}), 0)::int`,
+      gross: sql<string>`COALESCE(SUM(${salesLines.totalPrice}), 0)`,
+    })
+    .from(salesLines)
+    .innerJoin(salesOrders, eq(salesLines.salesOrderId, salesOrders.id))
+    .where(and(isNotNull(salesLines.ventureId), eq(salesOrders.status, "DELIVERED")))
+    .groupBy(salesLines.ventureId);
+
+  const ventureProduction = await db
+    .select({
+      ventureId: productionOrders.ventureId,
+      planned: sql<number>`COALESCE(SUM(${productionOrders.plannedQuantity}), 0)::int`,
+      good: sql<number>`COALESCE(SUM(${productionOrders.completedGoodQuantity}), 0)::int`,
+      defect: sql<number>`COALESCE(SUM(${productionOrders.completedDefectQuantity}), 0)::int`,
+    })
+    .from(productionOrders)
+    .where(isNotNull(productionOrders.ventureId))
+    .groupBy(productionOrders.ventureId);
+
+  // 4. Ventures summary
   const sanitizedVentures = allVentures.map((v) => {
     const parts = allParticipants.filter((p) => p.ventureId === v.id);
+    const vs = ventureSales.find((x) => x.ventureId === v.id);
+    const vp = ventureProduction.find((x) => x.ventureId === v.id);
+    const grossSales = Number(vs?.gross || 0);
+    const productionProgress = vp
+      ? {
+          plannedQty: vp.planned,
+          completedQty: vp.good,
+          qcPassRate:
+            vp.good + vp.defect > 0
+              ? Math.round((vp.good / (vp.good + vp.defect)) * 1000) / 10
+              : 100,
+        }
+      : undefined;
+    const salesProgress = vs
+      ? { unitsSold: vs.units, grossSales, netSales: grossSales }
+      : undefined;
     return {
+      productionProgress,
+      salesProgress,
       id: v.id,
       ventureNumber: v.ventureNumber,
       title: v.title,
@@ -306,35 +361,44 @@ export async function buildSanitizedPushPayload() {
     ventureId: b.ventureId || undefined,
   }));
 
-  // 6. Inventory low-stock alerts
-  const lots = await db
+  // 6. Inventory low-stock alerts — computed per SKU across ALL active lots
+  // (previously: first 10 lots only, then filtered, so most alerts were missed).
+  // Only sellable goods are considered (not raw material / consumables).
+  const stockRows = await db
     .select({
-      id: inventoryLots.id,
-      lotNumber: inventoryLots.lotNumber,
-      currentQuantity: inventoryLots.currentQuantity,
+      variantId: productVariants.id,
       sku: productVariants.sku,
       productName: products.name,
       size: productVariants.size,
       color: productVariants.color,
       reorderLevel: productVariants.reorderLevel,
+      available: sql<number>`COALESCE(SUM(${inventoryLots.currentQuantity} - ${inventoryLots.reservedQuantity}) FILTER (WHERE ${inventoryLots.status} = 'ACTIVE'), 0)::int`,
     })
-    .from(inventoryLots)
-    .innerJoin(productVariants, eq(inventoryLots.variantId, productVariants.id))
+    .from(productVariants)
     .innerJoin(products, eq(productVariants.productId, products.id))
-    .where(eq(inventoryLots.status, "ACTIVE"))
-    .limit(10);
+    .leftJoin(inventoryLots, eq(inventoryLots.variantId, productVariants.id))
+    .where(
+      and(
+        eq(products.status, "ACTIVE"),
+        inArray(products.productType, ["FINISHED_GARMENT", "BLANK"])
+      )
+    )
+    .groupBy(productVariants.id, products.name);
 
-  const lowStockAlerts = lots
-    .filter((l) => l.currentQuantity <= l.reorderLevel)
-    .map((l) => ({
-      id: l.id,
-      sku: l.sku,
-      productName: l.productName,
-      size: l.size,
-      color: l.color,
-      currentQuantity: l.currentQuantity,
-      reorderLevel: l.reorderLevel,
-      status: l.currentQuantity === 0 ? "OUT_OF_STOCK" : "LOW_STOCK",
+  const lowStockAlerts = stockRows
+    .map((r) => ({ ...r, available: Number(r.available) }))
+    .filter((r) => r.available <= r.reorderLevel)
+    .sort((a, b) => a.available - b.available)
+    .slice(0, 50)
+    .map((r) => ({
+      id: r.variantId,
+      sku: r.sku,
+      productName: r.productName,
+      size: r.size,
+      color: r.color,
+      currentQuantity: Math.max(0, r.available),
+      reorderLevel: r.reorderLevel,
+      status: r.available <= 0 ? "OUT_OF_STOCK" : "LOW_STOCK",
     }));
 
   // 7. Sanitized activity feed (derived from recent posted journals and audit logs)
@@ -345,11 +409,25 @@ export async function buildSanitizedPushPayload() {
     .orderBy(desc(journalEntries.date))
     .limit(8);
 
+  // Customer names must never reach the cloud: journal descriptions for sales
+  // include "(Customer Name)", so strip any known customer name before pushing.
+  const customerNameRows = await db
+    .selectDistinct({ name: salesOrders.customerName })
+    .from(salesOrders);
+  const redactCustomers = (text: string) => {
+    let out = text;
+    for (const { name } of customerNameRows) {
+      const n = name?.trim();
+      if (n && n.length >= 3) out = out.split(n).join("customer");
+    }
+    return out.replace(/\s*\(customer\)\s*$/i, "");
+  };
+
   const activityFeed = recentJournals.map((j) => ({
     id: j.id,
     category: j.sourceModule || "FINANCE",
     title: `Journal ${j.entryNumber}`,
-    description: j.description,
+    description: redactCustomers(j.description),
     timestamp: j.date.toISOString(),
     isPublic: true,
   }));
@@ -370,7 +448,7 @@ export async function buildSanitizedPushPayload() {
       wipInventory,
       finishedGoodsInventory,
       courierCodReceivable,
-      courierPendingSettlements: 0,
+      courierPendingSettlements,
       activeVenturesCount: sanitizedVentures.length,
       activeProductionOrdersCount: sanitizedBatches.length,
     },
