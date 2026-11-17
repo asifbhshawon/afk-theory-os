@@ -1,4 +1,5 @@
 import { buildSanitizedPushPayload } from "@/server/services/portal-sync";
+import { buildSalesReadModel, applySalesReadModel, type ReadModelApplyResult } from "@/server/services/portal-read-model";
 import { db } from "@/db";
 import { calendarEntries, partners, calendarCategories } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -18,7 +19,14 @@ export interface CloudSyncResult {
     activityFeed: number;
     calendarNotes: number;
     inventoryAlerts: number;
+    orders: number;
+    transactions: number;
+    dailyMetrics: number;
   };
+  /** Per-table incremental write stats: only changed rows are written. */
+  readModel?: ReadModelApplyResult;
+  /** True when the Vercel portal confirmed it dropped its cached pages. */
+  portalCacheRefreshed?: boolean;
   summary: {
     netRevenue: number;
     netProfit: number;
@@ -36,6 +44,11 @@ export interface CloudSyncStatus {
   isLive: boolean;
   sourceSystem?: string;
   error?: string;
+}
+
+// Supabase needs TLS; a plain local Postgres (used for testing the sync) does not.
+function cloudSsl(connectionString: string) {
+  return /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(connectionString) ? undefined : { rejectUnauthorized: false };
 }
 
 function getCloudConnectionString(): string {
@@ -59,7 +72,7 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
 
   const pool = new pg.Pool({
     connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: cloudSsl(connectionString),
     connectionTimeoutMillis: 8000,
   });
 
@@ -109,6 +122,27 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
   }
 }
 
+/**
+ * Best-effort: tells the deployed portal to revalidate its cache tag. Needs
+ * PARTNER_PORTAL_URL + SYNC_SHARED_SECRET in the local .env; silently skipped
+ * (returns false) when either is missing or the portal is unreachable.
+ */
+export async function pingPortalRevalidate(): Promise<boolean> {
+  const url = process.env.PARTNER_PORTAL_URL;
+  const secret = process.env.SYNC_SHARED_SECRET;
+  if (!url || !secret) return false;
+  try {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/api/sync/revalidate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${secret}`, "X-Sync-Secret": secret },
+      signal: AbortSignal.timeout(6000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function syncLocalErpToCloud(): Promise<CloudSyncResult> {
   const connectionString = getCloudConnectionString();
   if (!connectionString) {
@@ -117,6 +151,9 @@ export async function syncLocalErpToCloud(): Promise<CloudSyncResult> {
 
   // 1. Compile sanitized summary strictly from local Business OS ERP
   const { syncCursor, checksum, payload } = await buildSanitizedPushPayload();
+
+  // 1b. Sales orders, money ledger and daily aggregates (no customer PII)
+  const salesModel = await buildSalesReadModel();
 
   // 2. Fetch real calendar entries from local ERP
   const localCalendarNotes = await db
@@ -149,7 +186,7 @@ export async function syncLocalErpToCloud(): Promise<CloudSyncResult> {
 
   const pool = new pg.Pool({
     connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: cloudSsl(connectionString),
     connectionTimeoutMillis: 10000,
   });
 
@@ -481,6 +518,9 @@ export async function syncLocalErpToCloud(): Promise<CloudSyncResult> {
       );
     }
 
+    // 8b. Sales / money read model — incremental (hash-diffed) upserts
+    const readModel = await applySalesReadModel(client, salesModel, now);
+
     // 9. Update sync metadata singleton
     await client.query(
       `INSERT INTO portal_sync_meta (
@@ -499,10 +539,18 @@ export async function syncLocalErpToCloud(): Promise<CloudSyncResult> {
 
     await client.query("COMMIT");
 
+    // Ask the Vercel portal to drop its cached pages so partners see the change now
+    const portalCacheRefreshed = await pingPortalRevalidate();
+
     return {
       success: true,
       timestamp: now.toISOString(),
+      readModel,
+      portalCacheRefreshed,
       counts: {
+        orders: salesModel.orders.length,
+        transactions: salesModel.transactions.length,
+        dailyMetrics: salesModel.daily.length,
         paymentAccounts: payload.paymentAccounts?.length || 0,
         partnerStatements: payload.partnerStatements?.length || 0,
         ventures: payload.ventures?.length || 0,

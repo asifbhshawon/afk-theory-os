@@ -16,6 +16,7 @@ import {
 import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
 import { products, auditLogs } from "@/db/schema";
 import { postJournalEntry } from "./finance";
+import { schedulePortalSync } from "./portal-autosync";
 
 // Status flow: CONFIRMED -> SHIPPED -> DELIVERED -> (RETURNED)
 //              CONFIRMED | SHIPPED -> CANCELLED (reservation released)
@@ -105,7 +106,7 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
 
   const orderNumber = await generateOrderNumber();
 
-  return await db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     // 1. Concurrency-Safe Stock Reservation for each line
     const reservedLines: {
       variantId: string;
@@ -218,6 +219,8 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
 
     return { order, lines: reservedLines, isDuplicate: false };
   });
+  schedulePortalSync("order-created");
+  return created;
 }
 
 // Mark order shipped with courier
@@ -244,7 +247,7 @@ export async function shipSalesOrder(data: {
   const [transitLoc] = await db.select().from(locations).where(eq(locations.code, "TRANSIT")).limit(1);
   const [mainWh] = await db.select().from(locations).where(eq(locations.code, "MAIN_WH")).limit(1);
 
-  return await db.transaction(async (tx) => {
+  const shipped = await db.transaction(async (tx) => {
     await tx
       .update(salesOrders)
       .set({
@@ -275,6 +278,8 @@ export async function shipSalesOrder(data: {
 
     return { success: true };
   });
+  schedulePortalSync("order-shipped");
+  return shipped;
 }
 
 // Confirm delivery and recognise revenue + COGS
@@ -803,7 +808,7 @@ export async function cancelSalesOrder(data: {
   const [transitLoc] = await db.select().from(locations).where(eq(locations.code, "TRANSIT")).limit(1);
   const [mainWh] = await db.select().from(locations).where(eq(locations.code, "MAIN_WH")).limit(1);
 
-  return await db.transaction(async (tx) => {
+  const cancelled = await db.transaction(async (tx) => {
     const lines = await tx.select().from(salesLines).where(eq(salesLines.salesOrderId, order.id));
 
     for (const line of lines) {
@@ -860,6 +865,8 @@ export async function cancelSalesOrder(data: {
 
     return { success: true, orderNumber: order.orderNumber, releasedUnits: lines.reduce((s, l) => s + l.quantity, 0) };
   });
+  schedulePortalSync("order-cancelled");
+  return cancelled;
 }
 
 // Sellable catalogue for the quick-sale picker: price, cost and AVAILABLE stock

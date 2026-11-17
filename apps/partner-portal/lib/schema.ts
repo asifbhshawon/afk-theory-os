@@ -8,6 +8,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  date,
 } from "drizzle-orm/pg-core";
 
 // ==============================================================================
@@ -327,3 +328,83 @@ export const portalAttachments = pgTable(
   },
   (table) => [index("portal_attachments_entry_idx").on(table.calendarEntryId)]
 );
+
+// ==============================================================================
+// 9. SALES & MONEY READ MODEL (pushed from the local ERP — read-only here)
+// ==============================================================================
+
+export const portalSalesOrders = pgTable(
+  "portal_sales_orders",
+  {
+    id: text("id").primaryKey(),
+    orderNumber: text("order_number").notNull().unique(),
+    orderDate: timestamp("order_date", { withTimezone: true }).notNull(),
+    status: text("status").notNull(), // CONFIRMED, SHIPPED, DELIVERED, RETURNED, CANCELLED
+    paymentStatus: text("payment_status").notNull(), // COD_PENDING, PAID, VOID
+    channel: text("channel").notNull().default("MANUAL"),
+    cityZone: text("city_zone"),
+    units: integer("units").notNull().default(0),
+    subtotal: numeric("subtotal", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    discount: numeric("discount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    deliveryCharge: numeric("delivery_charge", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    totalAmount: numeric("total_amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    cogs: numeric("cogs", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    profit: numeric("profit", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    courierName: text("courier_name"),
+    waybillNumber: text("waybill_number"),
+    customerLabel: text("customer_label"), // initials + last 3 digits only — never full PII
+    items: jsonb("items").notNull().default([]), // [{ sku, name, size, color, qty, unitPrice, total }]
+    timeline: jsonb("timeline").notNull().default([]), // [{ status, at }]
+    rowHash: text("row_hash"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("portal_sales_orders_date_idx").on(table.orderDate),
+    index("portal_sales_orders_status_idx").on(table.status),
+  ]
+);
+
+export const portalTransactions = pgTable(
+  "portal_transactions",
+  {
+    id: text("id").primaryKey(), // local journal entry id
+    txnDate: timestamp("txn_date", { withTimezone: true }).notNull(),
+    kind: text("kind").notNull(), // SALE, RETURN, EXPENSE, DEPOSIT, LOAN, DRAWING, REIMBURSEMENT, SETTLEMENT, TRANSFER, PURCHASE, PRODUCTION, PAYMENT, REVERSAL, OTHER
+    direction: text("direction").notNull(), // IN, OUT, NEUTRAL (no cash moved)
+    title: text("title").notNull(),
+    description: text("description"),
+    category: text("category"),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+    accountLabel: text("account_label"),
+    partnerName: text("partner_name"),
+    journalNo: text("journal_no"),
+    sourceModule: text("source_module"),
+    isReversed: boolean("is_reversed").notNull().default(false),
+    rowHash: text("row_hash"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("portal_transactions_date_idx").on(table.txnDate),
+    index("portal_transactions_kind_idx").on(table.kind),
+  ]
+);
+
+export const portalDailyMetrics = pgTable("portal_daily_metrics", {
+  day: date("day", { mode: "string" }).primaryKey(), // YYYY-MM-DD in Asia/Dhaka
+  ordersCount: integer("orders_count").notNull().default(0),
+  unitsBooked: integer("units_booked").notNull().default(0),
+  bookedValue: numeric("booked_value", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  grossSales: numeric("gross_sales", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  deliveryIncome: numeric("delivery_income", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  returns: numeric("returns", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  cogs: numeric("cogs", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  expenses: numeric("expenses", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  cashIn: numeric("cash_in", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  cashOut: numeric("cash_out", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  capitalDeposits: numeric("capital_deposits", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  drawings: numeric("drawings", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  byChannel: jsonb("by_channel").notNull().default({}),
+  byCategory: jsonb("by_category").notNull().default({}),
+  rowHash: text("row_hash"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

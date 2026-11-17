@@ -18,6 +18,14 @@ interface SyncStatusData {
   isLive: boolean;
   sourceSystem?: string;
   error?: string;
+  auto?: {
+    enabled: boolean;
+    running: boolean;
+    dirty: boolean;
+    lastError: string | null;
+    failures: number;
+    nextRunAt: string | null;
+  };
 }
 
 interface SyncPortalButtonProps {
@@ -216,6 +224,34 @@ export function SyncPortalButton({
                 </a>
               </div>
             </div>
+
+            <div className="mt-1 flex items-center justify-between text-[11px] text-afk-muted">
+              <span>Auto-sync:</span>
+              <span
+                className={`font-mono ${
+                  !status?.auto?.enabled
+                    ? "text-afk-muted"
+                    : status.auto.lastError
+                    ? "text-amber-400"
+                    : status.auto.dirty
+                    ? "text-sky-400"
+                    : "text-emerald-400"
+                }`}
+              >
+                {!status?.auto?.enabled
+                  ? "Off"
+                  : status.auto.running
+                  ? "Syncing..."
+                  : status.auto.lastError
+                  ? `Retrying (${status.auto.failures})`
+                  : status.auto.dirty
+                  ? "Changes pending"
+                  : "Up to date"}
+              </span>
+            </div>
+            {status?.auto?.lastError && (
+              <p className="mt-1 text-[10px] text-amber-300/90 break-words">{status.auto.lastError}</p>
+            )}
 
             {errorMessage && (
               <div className="mt-2 p-2 bg-red-950/50 border border-red-500/40 rounded text-red-300 text-[11px]">

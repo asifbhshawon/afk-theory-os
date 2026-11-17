@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { eq, and, or, sql, desc, gte, lte, inArray } from "drizzle-orm";
 import { getEvidenceForEntities } from "./evidence";
+import { schedulePortalSync } from "./portal-autosync";
 
 export interface CreateJournalLineInput {
   accountId: string;
@@ -158,13 +159,13 @@ export async function postJournalEntry(input: CreateJournalEntryInput, txClient?
     return entry;
   };
 
-  if (txClient) {
-    return await executePost(txClient);
-  } else {
-    return await db.transaction(async (tx) => {
-      return await executePost(tx);
-    });
-  }
+  const posted = txClient
+    ? await executePost(txClient)
+    : await db.transaction(async (tx) => {
+        return await executePost(tx);
+      });
+  schedulePortalSync("journal");
+  return posted;
 }
 
 // Reverse posted journal entry

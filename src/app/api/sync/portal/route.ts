@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { syncLocalErpToCloud, getCloudSyncStatus } from "@/server/services/cloud-sync";
+import { getCloudSyncStatus } from "@/server/services/cloud-sync";
+import { syncPortalNow, getAutoSyncState } from "@/server/services/portal-autosync";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const status = await getCloudSyncStatus();
-    return NextResponse.json(status);
+    const [status, auto] = await Promise.all([getCloudSyncStatus(), getAutoSyncState()]);
+    return NextResponse.json({ ...status, auto });
   } catch (err: any) {
     return NextResponse.json(
       { isConfigured: false, error: err.message || "Failed to fetch cloud sync status" },
@@ -26,7 +27,7 @@ export async function POST() {
       );
     }
 
-    const result = await syncLocalErpToCloud();
+    const result = await syncPortalNow();
     return NextResponse.json(result);
   } catch (err: any) {
     console.error("[Sync Portal API Error]", err);

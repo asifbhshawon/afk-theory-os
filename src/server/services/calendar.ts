@@ -16,6 +16,7 @@ import {
   documents,
 } from "@/db/schema";
 import { eq, and, or, gte, lte, sql, desc, asc, inArray } from "drizzle-orm";
+import { schedulePortalSync } from "./portal-autosync";
 import {
   addDays,
   addWeeks,
@@ -552,6 +553,7 @@ export async function createCalendarEntry(
     });
   }
 
+  schedulePortalSync("calendar");
   return entry;
 }
 
@@ -627,6 +629,7 @@ export async function updateCalendarEntry(
     }
   }
 
+  schedulePortalSync("calendar");
   return updated;
 }
 
@@ -667,6 +670,7 @@ export async function deleteCalendarEntry(id: string) {
     })
     .where(eq(calendarEntries.id, id))
     .returning();
+  schedulePortalSync("calendar");
   return deleted;
 }
 

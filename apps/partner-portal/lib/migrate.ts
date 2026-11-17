@@ -2,6 +2,76 @@ import { pool } from "./db";
 
 let tablesInitialized = false;
 
+// Sales / money read model. Must stay byte-identical to READ_MODEL_DDL in
+// src/server/services/portal-read-model.ts (enforced by tests/acceptance/24-*).
+export const READ_MODEL_DDL = `
+CREATE TABLE IF NOT EXISTS portal_sales_orders (
+  id TEXT PRIMARY KEY,
+  order_number TEXT NOT NULL UNIQUE,
+  order_date TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL,
+  payment_status TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'MANUAL',
+  city_zone TEXT,
+  units INTEGER NOT NULL DEFAULT 0,
+  subtotal NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  discount NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  delivery_charge NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  total_amount NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  cogs NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  profit NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  courier_name TEXT,
+  waybill_number TEXT,
+  customer_label TEXT,
+  items JSONB NOT NULL DEFAULT '[]',
+  timeline JSONB NOT NULL DEFAULT '[]',
+  row_hash TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS portal_sales_orders_date_idx ON portal_sales_orders (order_date DESC);
+CREATE INDEX IF NOT EXISTS portal_sales_orders_status_idx ON portal_sales_orders (status);
+
+CREATE TABLE IF NOT EXISTS portal_transactions (
+  id TEXT PRIMARY KEY,
+  txn_date TIMESTAMPTZ NOT NULL,
+  kind TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  amount NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  account_label TEXT,
+  partner_name TEXT,
+  journal_no TEXT,
+  source_module TEXT,
+  is_reversed BOOLEAN NOT NULL DEFAULT false,
+  row_hash TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS portal_transactions_date_idx ON portal_transactions (txn_date DESC);
+CREATE INDEX IF NOT EXISTS portal_transactions_kind_idx ON portal_transactions (kind);
+
+CREATE TABLE IF NOT EXISTS portal_daily_metrics (
+  day DATE PRIMARY KEY,
+  orders_count INTEGER NOT NULL DEFAULT 0,
+  units_booked INTEGER NOT NULL DEFAULT 0,
+  booked_value NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  gross_sales NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  delivery_income NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  returns NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  cogs NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  expenses NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  cash_in NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  cash_out NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  capital_deposits NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  drawings NUMERIC(18,2) NOT NULL DEFAULT 0.00,
+  by_channel JSONB NOT NULL DEFAULT '{}',
+  by_category JSONB NOT NULL DEFAULT '{}',
+  row_hash TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+`;
+
 export async function ensurePortalTablesExist() {
   if (tablesInitialized) return;
 
@@ -227,6 +297,7 @@ export async function ensurePortalTablesExist() {
 
   try {
     await pool.query(ddl);
+    await pool.query(READ_MODEL_DDL);
     tablesInitialized = true;
   } catch (err) {
     console.error("[Migration Error] Failed to ensure portal tables:", err);

@@ -176,6 +176,22 @@ async function buildPartnerSettlementHistories(allPartners: any[], statements: a
   return result;
 }
 
+// Customer names must never reach the cloud: journal descriptions for sales
+// include "(Customer Name)", so strip any known customer name before pushing.
+export async function makeCustomerRedactor(): Promise<(text: string) => string> {
+  const customerNameRows = await db
+    .selectDistinct({ name: salesOrders.customerName })
+    .from(salesOrders);
+  const names = customerNameRows
+    .map((r) => r.name?.trim())
+    .filter((n): n is string => !!n && n.length >= 3);
+  return (text: string) => {
+    let out = text;
+    for (const n of names) out = out.split(n).join("customer");
+    return out.replace(/\s*\(customer\)\s*$/i, "");
+  };
+}
+
 export interface PortalSyncResult {
   success: boolean;
   timestamp: string;
@@ -409,19 +425,7 @@ export async function buildSanitizedPushPayload() {
     .orderBy(desc(journalEntries.date))
     .limit(8);
 
-  // Customer names must never reach the cloud: journal descriptions for sales
-  // include "(Customer Name)", so strip any known customer name before pushing.
-  const customerNameRows = await db
-    .selectDistinct({ name: salesOrders.customerName })
-    .from(salesOrders);
-  const redactCustomers = (text: string) => {
-    let out = text;
-    for (const { name } of customerNameRows) {
-      const n = name?.trim();
-      if (n && n.length >= 3) out = out.split(n).join("customer");
-    }
-    return out.replace(/\s*\(customer\)\s*$/i, "");
-  };
+  const redactCustomers = await makeCustomerRedactor();
 
   const activityFeed = recentJournals.map((j) => ({
     id: j.id,
