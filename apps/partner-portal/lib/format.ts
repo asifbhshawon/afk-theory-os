@@ -23,19 +23,20 @@ export function formatCompactBdt(amount: number | string | null | undefined): st
   }
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   const abs = Math.abs(num);
+  const sign = num < 0 ? "−" : "";
 
   if (abs >= 10_000_000) {
     // 1 Crore = 10,000,000 BDT
-    return `৳${(num / 10_000_000).toFixed(2)} Cr`;
+    return `${sign}৳${(abs / 10_000_000).toFixed(2)} Cr`;
   }
   if (abs >= 100_000) {
     // 1 Lakh = 100,000 BDT
-    return `৳${(num / 100_000).toFixed(2)} L`;
+    return `${sign}৳${(abs / 100_000).toFixed(2)} L`;
   }
   if (abs >= 1_000) {
-    return `৳${(num / 1_000).toFixed(1)}k`;
+    return `${sign}৳${(abs / 1_000).toFixed(1)}k`;
   }
-  return formatBdt(num);
+  return num < 0 ? `${sign}${formatBdt(abs)}` : formatBdt(num);
 }
 
 export function formatDate(date: Date | string | null | undefined, fmt = "dd MMM yyyy"): string {
@@ -62,4 +63,26 @@ export function formatRelativeSyncTime(date: Date | string | null | undefined): 
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
   return formatDate(d, "dd MMM, hh:mm a");
+}
+
+/** Compact number for chart axes: 950, 12k, 1.2L, 3.4Cr (no currency symbol). */
+export function formatAxis(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 10_000_000) return `${sign}${trim(abs / 10_000_000)}Cr`;
+  if (abs >= 100_000) return `${sign}${trim(abs / 100_000)}L`;
+  if (abs >= 1_000) return `${sign}${trim(abs / 1_000)}k`;
+  return `${sign}${Math.round(abs)}`;
+}
+
+function trim(n: number): string {
+  return n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+}
+
+/** "+12.5%" / "−3%" for period-over-period deltas. */
+export function formatPct(value: number | null | undefined): string {
+  if (value === null || value === undefined || !isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const text = abs >= 100 ? Math.round(abs).toString() : abs.toFixed(1).replace(/\.0$/, "");
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${text}%`;
 }

@@ -6,6 +6,13 @@ import {
   portalTransactions,
   portalDailyMetrics,
   portalSyncMeta,
+  portalBusinessSummaries,
+  portalPaymentAccounts,
+  portalPartnerStatements,
+  portalVentures,
+  portalManufacturingBatches,
+  portalInventoryAlerts,
+  portalActivityFeed,
 } from "./schema";
 
 /**
@@ -194,4 +201,150 @@ export const getSyncFreshness = unstable_cache(
   },
   ["portal-sync-freshness"],
   { tags: [PORTAL_DATA_TAG], revalidate: 300 }
+);
+
+// ---------------------------------------------------------------------------
+// Overview snapshot — the global (not partner-specific) read model, one cached call
+// ---------------------------------------------------------------------------
+
+export interface OverviewSnapshot {
+  summary: {
+    netRevenue: number;
+    grossRevenue: number;
+    salesReturns: number;
+    grossProfit: number;
+    operatingExpenses: number;
+    netProfit: number;
+    availableCash: number;
+    totalInventoryValue: number;
+    courierCodReceivable: number;
+    courierPendingSettlements: number;
+    updatedAt: string | null;
+  } | null;
+  wallets: { id: string; name: string; type: string; balance: number }[];
+  ventures: {
+    id: string;
+    ventureNumber: string;
+    title: string;
+    stage: string;
+    targetBudget: number;
+    actualCashRaised: number;
+  }[];
+  batches: {
+    id: string;
+    orderNumber: string;
+    productName: string;
+    status: string;
+    plannedQuantity: number;
+    completedGoodQuantity: number;
+    targetDate: string | null;
+  }[];
+  alerts: {
+    id: string;
+    sku: string;
+    productName: string;
+    size: string | null;
+    color: string | null;
+    currentQuantity: number;
+    reorderLevel: number;
+    status: string;
+  }[];
+  activity: { id: string; category: string; title: string; description: string; timestamp: string }[];
+}
+
+export const getOverviewSnapshot = unstable_cache(
+  async (): Promise<OverviewSnapshot> => {
+    const [[summary], wallets, ventures, batches, alerts, activity] = await Promise.all([
+      db.select().from(portalBusinessSummaries).where(eq(portalBusinessSummaries.id, "latest")).limit(1),
+      db.select().from(portalPaymentAccounts).where(eq(portalPaymentAccounts.isActive, true)),
+      db.select().from(portalVentures).orderBy(desc(portalVentures.updatedAt)),
+      db.select().from(portalManufacturingBatches).orderBy(portalManufacturingBatches.targetDate).limit(8),
+      db.select().from(portalInventoryAlerts).orderBy(portalInventoryAlerts.currentQuantity).limit(50),
+      db.select().from(portalActivityFeed).orderBy(desc(portalActivityFeed.timestamp)).limit(8),
+    ]);
+
+    return {
+      summary: summary
+        ? {
+            netRevenue: n(summary.netRevenue),
+            grossRevenue: n(summary.grossRevenue),
+            salesReturns: n(summary.salesReturns),
+            grossProfit: n(summary.grossProfit),
+            operatingExpenses: n(summary.operatingExpenses),
+            netProfit: n(summary.netProfit),
+            availableCash: n(summary.availableCash),
+            totalInventoryValue: n(summary.totalInventoryValue),
+            courierCodReceivable: n(summary.courierCodReceivable),
+            courierPendingSettlements: n(summary.courierPendingSettlements),
+            updatedAt: iso(summary.updatedAt),
+          }
+        : null,
+      wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, balance: n(w.balance) })),
+      ventures: ventures.map((v) => ({
+        id: v.id,
+        ventureNumber: v.ventureNumber,
+        title: v.title,
+        stage: v.stage,
+        targetBudget: n(v.targetBudget),
+        actualCashRaised: n(v.actualCashRaised),
+      })),
+      batches: batches.map((b) => ({
+        id: b.id,
+        orderNumber: b.orderNumber,
+        productName: b.productName,
+        status: b.status,
+        plannedQuantity: b.plannedQuantity,
+        completedGoodQuantity: b.completedGoodQuantity,
+        targetDate: iso(b.targetDate),
+      })),
+      alerts: alerts.map((a) => ({
+        id: a.id,
+        sku: a.sku,
+        productName: a.productName,
+        size: a.size,
+        color: a.color,
+        currentQuantity: a.currentQuantity,
+        reorderLevel: a.reorderLevel,
+        status: a.status,
+      })),
+      activity: activity.map((a) => ({
+        id: a.id,
+        category: a.category,
+        title: a.title,
+        description: a.description,
+        timestamp: iso(a.timestamp)!,
+      })),
+    };
+  },
+  ["portal-overview-snapshot"],
+  { tags: [PORTAL_DATA_TAG], revalidate: TTL }
+);
+
+export interface PartnerStatementView {
+  capitalContributed: number;
+  loanBalanceOwed: number;
+  drawings: number;
+  shareOfProfit: number;
+  totalEquity: number;
+}
+
+/** One partner's own position. The partner id is part of the cache key. */
+export const getPartnerStatement = unstable_cache(
+  async (partnerId: string): Promise<PartnerStatementView | null> => {
+    const [row] = await db
+      .select()
+      .from(portalPartnerStatements)
+      .where(eq(portalPartnerStatements.partnerId, partnerId))
+      .limit(1);
+    if (!row) return null;
+    return {
+      capitalContributed: n(row.capitalContributed),
+      loanBalanceOwed: n(row.loanBalanceOwed),
+      drawings: n(row.drawings),
+      shareOfProfit: n(row.shareOfProfit),
+      totalEquity: n(row.totalEquity),
+    };
+  },
+  ["portal-partner-statement"],
+  { tags: [PORTAL_DATA_TAG], revalidate: TTL }
 );
