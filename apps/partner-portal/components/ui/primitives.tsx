@@ -149,3 +149,31 @@ export function ProgressBar({
     </div>
   );
 }
+
+/** One heading style for every portal page: title (+ optional badge), subtitle and a right-hand slot. */
+export function PageHeader({
+  title,
+  subtitle,
+  badge,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={clsx("flex flex-col sm:flex-row sm:items-end justify-between gap-4", className)}>
+      <div className="min-w-0">
+        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight text-afk-offwhite">
+          <span>{title}</span>
+          {badge}
+        </h1>
+        {subtitle && <p className="text-sm text-afk-secondary mt-0.5">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}

@@ -212,6 +212,7 @@ export interface OverviewSnapshot {
     netRevenue: number;
     grossRevenue: number;
     salesReturns: number;
+    totalCogs: number;
     grossProfit: number;
     operatingExpenses: number;
     netProfit: number;
@@ -269,6 +270,7 @@ export const getOverviewSnapshot = unstable_cache(
             netRevenue: n(summary.netRevenue),
             grossRevenue: n(summary.grossRevenue),
             salesReturns: n(summary.salesReturns),
+            totalCogs: n(summary.totalCogs),
             grossProfit: n(summary.grossProfit),
             operatingExpenses: n(summary.operatingExpenses),
             netProfit: n(summary.netProfit),

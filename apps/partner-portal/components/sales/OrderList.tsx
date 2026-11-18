@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/useDialogFocus";
 import clsx from "clsx";
 import { ChevronRight, ShoppingBag, Truck, X } from "lucide-react";
 import { EmptyState, Pill, orderStatusTone } from "@/components/ui/primitives";
@@ -110,6 +111,8 @@ function Row({ label, value, strong, tone }: { label: string; value: string; str
 }
 
 function OrderDrawer({ order: o, onClose }: { order: SalesOrderView; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -127,7 +130,7 @@ function OrderDrawer({ order: o, onClose }: { order: SalesOrderView; onClose: ()
   const margin = goods > 0 ? Math.round((o.profit / goods) * 1000) / 10 : 0;
 
   return (
-    <div className="no-print fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Order ${o.orderNumber}`}>
+    <div ref={dialogRef} tabIndex={-1} className="no-print fixed inset-0 z-50 outline-none" role="dialog" aria-modal="true" aria-label={`Order ${o.orderNumber}`}>
       <button className="absolute inset-0 bg-black/70" aria-label="Close order details" onClick={onClose} />
       <aside className="absolute bottom-0 inset-x-0 max-h-[92vh] md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[440px] overflow-y-auto rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-afk-borderLight bg-afk-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
         <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-afk-border bg-afk-card/95 backdrop-blur px-5 py-4">

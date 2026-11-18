@@ -1,10 +1,7 @@
-import { db } from "@/lib/db";
-import {
-  portalBusinessSummaries,
-  portalPartnerStatements,
-} from "@/lib/schema";
-import { eq } from "drizzle-orm";
 import { getCurrentPartner } from "@/lib/auth";
+import { getAllPartnerStatements } from "@/lib/portal-data-misc";
+import { getOverviewSnapshot } from "@/lib/portal-data";
+import { PageHeader } from "@/components/ui/primitives";
 import { formatBdt, formatDate } from "@/lib/format";
 import { Printer, FileText, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { PrintButton } from "@/components/PrintButton";
@@ -15,13 +12,9 @@ export default async function ReportsPage() {
   const partner = await getCurrentPartner();
   if (!partner) return null;
 
-  const [summary] = await db
-    .select()
-    .from(portalBusinessSummaries)
-    .where(eq(portalBusinessSummaries.id, "latest"))
-    .limit(1);
-
-  const statements = await db.select().from(portalPartnerStatements);
+  // Both served from the tagged cache — no database query between syncs
+  const [snapshot, statements] = await Promise.all([getOverviewSnapshot(), getAllPartnerStatements()]);
+  const summary = snapshot.summary;
 
   const netRevenue = Number(summary?.netRevenue || 0);
   const grossRevenue = Number(summary?.grossRevenue || 0);
@@ -39,18 +32,13 @@ export default async function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Screen Toolbar (hidden in print) */}
-      <div className="no-print pb-3 border-b border-afk-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-afk-offwhite flex items-center gap-2">
-            <span>Executive Financial Reports & Summaries</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-afk-secondary mt-0.5">
-            Verified financial statements derived from authoritative ERP general ledger postings
-          </p>
-        </div>
-
+      <PageHeader
+        className="no-print"
+        title="Financial reports"
+        subtitle="Statements derived from posted ERP ledger entries — print or save as PDF"
+      >
         <PrintButton />
-      </div>
+      </PageHeader>
 
       {/* Printable Document Container */}
       <div className="bg-afk-card print:bg-white print:text-black p-6 sm:p-8 rounded-xl border border-afk-border print:border-none shadow-sm space-y-8 print:p-0">

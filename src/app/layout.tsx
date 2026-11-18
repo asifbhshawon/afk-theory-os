@@ -69,19 +69,22 @@ export default async function RootLayout({
       className={`dark ${geistSans.variable} ${geistMono.variable} ${notoBengali.variable}`}
     >
       <body className="bg-afk-black text-afk-offwhite font-sans min-h-screen flex selection:bg-afk-olive/40 selection:text-afk-offwhite antialiased">
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-afk-olive focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-afk-offwhite">
+          Skip to main content
+        </a>
         {!isBareLayout ? (
           <>
             <Sidebar />
             <div className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
               <Header />
-              <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
+              <main id="main-content" tabIndex={-1} className="flex-1 outline-none p-4 md:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
                 {children}
               </main>
             </div>
             <MobileNav />
           </>
         ) : (
-          <main className="min-h-screen w-full flex-1">
+          <main id="main-content" className="min-h-screen w-full flex-1">
             {children}
           </main>
         )}

@@ -21,10 +21,13 @@ export default async function PortalLayout({
 
   return (
     <div className="min-h-screen bg-afk-black text-afk-offwhite">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-afk-olive focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-afk-offwhite">
+        Skip to main content
+        </a>
       <Sidebar partner={partner} />
       <div className="lg:pl-64 print:pl-0 flex min-h-screen flex-col">
         <TopBar partner={partner} lastPushedAt={freshness.lastPushedAt} />
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10 print:p-0">
+        <main id="main-content" tabIndex={-1} className="flex-1 outline-none w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-10 print:p-0">
           {children}
         </main>
         <footer className="no-print hidden lg:block border-t border-afk-border py-4 text-center text-xs text-afk-muted">

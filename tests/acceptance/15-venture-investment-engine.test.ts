@@ -280,7 +280,7 @@ describe("Acceptance Test 15: Flexible Partnership & Project Investment Engine",
     // Rafi and Midhat each get 50%
     const rafi = result.participantResults.find((p) => p.name === "Rafi");
     const midhat = result.participantResults.find((p) => p.name === "Midhat");
-    expect(rafi?.residualProfit + midhat?.residualProfit).toBe(25000);
+    expect((rafi?.residualProfit ?? 0) + (midhat?.residualProfit ?? 0)).toBe(25000);
   });
 
   // --------------------------------------------------------------------------

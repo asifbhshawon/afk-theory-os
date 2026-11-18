@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Ban, Check, Copy, PackageCheck, Paperclip, Phone, Printer, RotateCcw, Truck, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { AddProofModal } from "@/components/evidence/AddProofModal";
 import { EvidenceGallery } from "@/components/evidence/EvidenceGallery";
 import type { ViewerDocument } from "@/components/evidence/EvidenceViewer";
 import { ghostBtn, primaryBtn } from "./Modal";
+import { useDialogFocus } from "./useDialogFocus";
 import { STATUS_LABEL, STATUS_STYLE, bdt, paymentLabel, type OrderRow } from "./types";
 
 export type DrawerAction = "ship" | "deliver" | "cancel" | "return";
@@ -83,6 +84,8 @@ export function OrderDrawer({
 }) {
   const router = useRouter();
   const [proofOpen, setProofOpen] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -105,7 +108,7 @@ export function OrderDrawer({
   const canCancel = canShip || o.status === "SHIPPED";
 
   return (
-    <div className="no-print fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={`Order ${o.orderNumber}`}>
+    <div ref={dialogRef} tabIndex={-1} className="no-print fixed inset-0 z-40 outline-none" role="dialog" aria-modal="true" aria-label={`Order ${o.orderNumber}`}>
       <button className="absolute inset-0 bg-black/70" aria-label="Close order panel" onClick={onClose} />
       <aside className="absolute bottom-0 inset-x-0 max-h-[92vh] md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[480px] overflow-y-auto rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-l border-afk-borderLight bg-afk-card shadow-2xl">
         <header className="sticky top-0 z-10 border-b border-afk-border bg-afk-card/95 backdrop-blur px-5 py-4">

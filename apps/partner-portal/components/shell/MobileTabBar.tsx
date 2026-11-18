@@ -1,37 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/useDialogFocus";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { LogOut, MoreHorizontal, X } from "lucide-react";
 import type { PortalPartner } from "@/lib/constants";
-import { ALL_NAV_ITEMS, isActive } from "./nav";
+import { ALL_NAV_ITEMS, isActive, type NavItem } from "./nav";
 import { useLogout } from "./useLogout";
 
-/** Phone navigation: four primary tabs + a "More" sheet (hidden from `lg` up). */
-export function MobileTabBar({ partner }: { partner: PortalPartner }) {
-  const pathname = usePathname();
-  const { logout, busy } = useLogout();
-  const [open, setOpen] = useState(false);
 
-  const primary = ALL_NAV_ITEMS.filter((i) => i.mobilePrimary).slice(0, 4);
-  const more = ALL_NAV_ITEMS.filter((i) => !primary.includes(i));
-  const moreActive = more.some((i) => isActive(pathname, i.href));
-
-  useEffect(() => setOpen(false), [pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
+function MoreSheet({
+  partner,
+  more,
+  pathname,
+  logout,
+  busy,
+  onClose,
+}: {
+  partner: PortalPartner;
+  more: NavItem[];
+  pathname: string;
+  logout: () => void;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref);
   return (
-    <>
-      {open && (
-        <div className="no-print lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="More navigation">
-          <button className="absolute inset-0 bg-black/70" aria-label="Close menu" onClick={() => setOpen(false)} />
+    <div ref={ref} tabIndex={-1} className="no-print lg:hidden fixed inset-0 z-50 outline-none" role="dialog" aria-modal="true" aria-label="More navigation">
+          <button className="absolute inset-0 bg-black/70" aria-label="Close menu" onClick={() => onClose()} />
           <div className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-afk-borderLight bg-afk-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -43,7 +42,7 @@ export function MobileTabBar({ partner }: { partner: PortalPartner }) {
                   <p className="text-2xs text-afk-muted">{partner.role === "ADMIN" ? "Founding Admin" : "Founding Partner"}</p>
                 </div>
               </div>
-              <button onClick={() => setOpen(false)} aria-label="Close" className="p-2 text-afk-muted hover:text-afk-offwhite">
+              <button onClick={() => onClose()} aria-label="Close" className="p-2 text-afk-muted hover:text-afk-offwhite">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -77,7 +76,32 @@ export function MobileTabBar({ partner }: { partner: PortalPartner }) {
               </button>
             </div>
           </div>
-        </div>
+    </div>
+  );
+}
+
+/** Phone navigation: four primary tabs + a "More" sheet (hidden from `lg` up). */
+export function MobileTabBar({ partner }: { partner: PortalPartner }) {
+  const pathname = usePathname();
+  const { logout, busy } = useLogout();
+  const [open, setOpen] = useState(false);
+
+  const primary = ALL_NAV_ITEMS.filter((i) => i.mobilePrimary).slice(0, 4);
+  const more = ALL_NAV_ITEMS.filter((i) => !primary.includes(i));
+  const moreActive = more.some((i) => isActive(pathname, i.href));
+
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <>
+      {open && (
+        <MoreSheet partner={partner} more={more} pathname={pathname} logout={logout} busy={busy} onClose={() => setOpen(false)} />
       )}
 
       <nav

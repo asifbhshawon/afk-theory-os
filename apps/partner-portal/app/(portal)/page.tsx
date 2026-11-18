@@ -41,7 +41,7 @@ import { formatBdt, formatCompactBdt, formatDate, formatDateTime } from "@/lib/f
 import { AreaChart } from "@/components/charts/AreaChart";
 import { Donut } from "@/components/charts/Donut";
 import { CATEGORY_PALETTE, CHART_COLORS } from "@/components/charts/chart-utils";
-import { Card, CardHeader, EmptyState, Pill, ProgressBar, orderStatusTone } from "@/components/ui/primitives";
+import { Card, CardHeader, EmptyState, PageHeader, Pill, ProgressBar, orderStatusTone } from "@/components/ui/primitives";
 import { StatCard } from "@/components/ui/StatCard";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 
@@ -152,17 +152,12 @@ export default async function OverviewPage({
   return (
     <div className="space-y-6">
       {/* ── Header ───────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-afk-offwhite">
-            {greeting()}, {partner.name}
-          </h1>
-          <p className="text-sm text-afk-secondary mt-0.5">
-            {formatDate(now, "EEEE, d MMMM yyyy")} · how AFK THEORY is doing
-          </p>
-        </div>
+      <PageHeader
+        title={`${greeting()}, ${partner.name}`}
+        subtitle={`${formatDate(now, "EEEE, d MMMM yyyy")} · how AFK THEORY is doing`}
+      >
         <PeriodPicker value={days} />
-      </div>
+      </PageHeader>
 
       {/* ── KPIs ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">

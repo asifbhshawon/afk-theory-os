@@ -202,8 +202,8 @@ export function QuickSaleForm({
     >
       <div className="flex items-center gap-2 px-5 py-3.5 border-b border-afk-border">
         <ShoppingBag className="w-4 h-4 text-afk-olive-accent" />
-        <h3 className="text-sm font-semibold text-afk-offwhite">New Sale</h3>
-        <span className="text-xs text-afk-muted">Reserves stock instantly · cash on delivery</span>
+        <h3 className="text-sm font-semibold text-afk-offwhite whitespace-nowrap">New Sale</h3>
+        <span className="hidden sm:inline text-xs text-afk-muted">Reserves stock instantly · cash on delivery</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">

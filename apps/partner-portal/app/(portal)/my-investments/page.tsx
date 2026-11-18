@@ -1,15 +1,9 @@
-import { db } from "@/lib/db";
-import { portalPartnerStatements, portalVentures } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { ArrowDownLeft, ArrowUpRight, Briefcase, ShieldCheck, Wallet } from "lucide-react";
 import { getCurrentPartner } from "@/lib/auth";
+import { getAllPartnerStatements } from "@/lib/portal-data-misc";
 import { formatBdt } from "@/lib/format";
-import {
-  Wallet,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ShieldCheck,
-  Briefcase,
-} from "lucide-react";
+import { Card, CardHeader, PageHeader, Pill } from "@/components/ui/primitives";
+import { StatCard } from "@/components/ui/StatCard";
 import { PartnerSettlementHistoryView } from "@/components/PartnerSettlementHistoryView";
 
 export const dynamic = "force-dynamic";
@@ -18,153 +12,70 @@ export default async function MyInvestmentsPage() {
   const partner = await getCurrentPartner();
   if (!partner) return null;
 
-  const allStatements = await db.select().from(portalPartnerStatements);
+  // Cached for the whole portal: one query per sync, not per page view
+  const allStatements = await getAllPartnerStatements();
+  const statement = allStatements.find((s) => s.partnerId === partner.id) ?? allStatements[0];
 
-  const statement = allStatements.find(
-    (s) => s.partnerId === partner.id
-  ) || allStatements[0];
-
-  const capitalContributed = Number(statement?.capitalContributed || 0);
-  const loanBalanceOwed = Number(statement?.loanBalanceOwed || 0);
-  const drawings = Number(statement?.drawings || 0);
-  const shareOfProfit = Number(statement?.shareOfProfit || 0);
-  const totalEquity = Number(statement?.totalEquity || 0);
-  const ventureContributions = Number(statement?.ventureContributions || 0);
-  const ventureEntitlements = Number(statement?.ventureEntitlements || 0);
-  const ownershipPct = statement?.ownershipPct || "20.00";
-  const profitSharePct = statement?.profitSharePct || "20.00";
+  const capital = Number(statement?.capitalContributed ?? 0);
+  const loans = Number(statement?.loanBalanceOwed ?? 0);
+  const drawings = Number(statement?.drawings ?? 0);
+  const profit = Number(statement?.shareOfProfit ?? 0);
+  const equity = Number(statement?.totalEquity ?? 0);
+  const ventureIn = Number(statement?.ventureContributions ?? 0);
+  const ventureDue = Number(statement?.ventureEntitlements ?? 0);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-3 border-b border-afk-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-afk-offwhite flex items-center gap-2">
-            <span>My Financial Position & Investments</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-afk-surface border border-afk-border text-afk-gold font-semibold">
-              {partner.name}
-            </span>
-          </h1>
-          <p className="text-xs sm:text-sm text-afk-secondary mt-0.5">
-            Personal equity, company loans, venture allocations and distribution history
-          </p>
-        </div>
-
+      <PageHeader
+        title="My investments"
+        subtitle="Your equity, company loans, venture allocations and distribution history"
+        badge={<Pill tone="gold">{partner.name}</Pill>}
+      >
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-lg bg-afk-surface border border-afk-border text-xs text-afk-secondary flex items-center gap-2">
-            <span>Ownership Share:</span>
-            <span className="font-bold text-afk-offwhite">{ownershipPct}%</span>
-          </div>
-          <div className="px-3 py-1.5 rounded-lg bg-afk-surface border border-afk-border text-xs text-afk-secondary flex items-center gap-2">
-            <span>Profit Share:</span>
-            <span className="font-bold text-afk-olive-accent">{profitSharePct}%</span>
-          </div>
+          <Pill>Ownership {statement?.ownershipPct ?? "20.00"}%</Pill>
+          <Pill tone="olive">Profit share {statement?.profitSharePct ?? "20.00"}%</Pill>
         </div>
-      </div>
+      </PageHeader>
 
-      {/* Distinction Alert: Corporate Equity vs Project Ventures */}
-      <div className="p-4 rounded-xl bg-afk-surface border border-afk-borderLight text-xs text-afk-secondary flex items-start gap-3">
+      <div className="flex items-start gap-3 rounded-xl border border-afk-borderLight bg-afk-surface p-4 text-xs text-afk-secondary">
         <ShieldCheck className="w-5 h-5 text-afk-gold shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold text-afk-offwhite">
-            Authoritative Segregation of Company Ownership vs. Project Ventures
-          </p>
+          <p className="font-semibold text-afk-offwhite">Company ownership and project ventures are kept separate</p>
           <p className="mt-0.5 text-afk-muted leading-relaxed">
-            Company equity represents your 20.00% founding partnership in AFK THEORY operations.
-            Venture-specific investments represent independent project pools with agreed waterfall allocations.
-            All numbers reflect posted general ledger journal entries.
+            Company equity is your founding partnership in AFK THEORY. Venture investments are independent project pools with their own
+            profit-sharing rules. Every figure comes from posted ledger entries.
           </p>
         </div>
       </div>
 
-      {/* Primary Financial Position Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Total Net Partner Equity */}
-        <div className="bg-afk-card p-5 rounded-xl border border-afk-border shadow-sm">
-          <div className="flex items-center justify-between text-xs font-medium text-afk-secondary">
-            <span>Total Net Partner Equity</span>
-            <Wallet className="w-4 h-4 text-afk-gold" />
-          </div>
-          <p className="text-2xl font-bold text-afk-gold mt-2 tabular-nums">
-            {formatBdt(totalEquity)}
-          </p>
-          <p className="text-2xs text-afk-muted mt-1">
-            Capital ({formatBdt(capitalContributed)}) − Drawings ({formatBdt(drawings)}) + Profit ({formatBdt(shareOfProfit)})
-          </p>
-        </div>
-
-        {/* Due to Partner (Loans & Advances) */}
-        <div className="bg-afk-card p-5 rounded-xl border border-afk-border shadow-sm">
-          <div className="flex items-center justify-between text-xs font-medium text-afk-secondary">
-            <span>Outstanding Loans Due to Me</span>
-            <ArrowDownLeft className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-emerald-400 mt-2 tabular-nums">
-            {formatBdt(loanBalanceOwed)}
-          </p>
-          <p className="text-2xs text-afk-muted mt-1">
-            Reimbursable personal expenses and loan advances owed by the company
-          </p>
-        </div>
-
-        {/* Drawings / Withdrawals */}
-        <div className="bg-afk-card p-5 rounded-xl border border-afk-border shadow-sm">
-          <div className="flex items-center justify-between text-xs font-medium text-afk-secondary">
-            <span>Historical Partner Drawings</span>
-            <ArrowUpRight className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-2xl font-bold text-amber-400 mt-2 tabular-nums">
-            {formatBdt(drawings)}
-          </p>
-          <p className="text-2xs text-afk-muted mt-1">
-            Personal cash drawings and profit advances disbursed
-          </p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <StatCard
+          label="Total net equity"
+          value={formatBdt(equity)}
+          hint={`Capital ${formatBdt(capital)} − drawings ${formatBdt(drawings)} + profit ${formatBdt(profit)}`}
+          icon={Wallet}
+        />
+        <StatCard label="Loans due to me" value={formatBdt(loans)} hint="Reimbursable expenses and advances owed by the company" icon={ArrowDownLeft} />
+        <StatCard label="Drawings to date" value={formatBdt(drawings)} hint="Cash drawings and profit advances taken" icon={ArrowUpRight} />
       </div>
 
-      {/* Venture Participation Summary */}
-      <div className="bg-afk-card p-5 rounded-xl border border-afk-border shadow-sm">
-        <div className="flex items-center justify-between pb-3 border-b border-afk-border">
-          <div className="flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-afk-olive-accent" />
-            <h2 className="text-sm font-bold text-afk-offwhite">
-              Venture-Specific Investments & Entitlements
-            </h2>
+      <Card>
+        <CardHeader title="Venture investments & entitlements" subtitle="Segregated project pools" icon={Briefcase} />
+        <dl className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-afk-border bg-afk-surface p-4">
+            <dt className="text-xs text-afk-secondary">Contributed to ventures</dt>
+            <dd className="text-xl font-bold tabular-nums text-afk-offwhite mt-1">{formatBdt(ventureIn)}</dd>
+            <p className="text-2xs text-afk-muted mt-1">Confirmed cash put into dedicated project pools</p>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          <div className="p-4 rounded-lg bg-afk-surface border border-afk-border">
-            <span className="text-xs text-afk-secondary block">
-              Total Contributed to Dedicated Ventures
-            </span>
-            <span className="text-xl font-bold text-afk-offwhite block mt-1 tabular-nums">
-              {formatBdt(ventureContributions)}
-            </span>
-            <span className="text-2xs text-afk-muted block mt-1">
-              Direct cash contributions pledged and confirmed into segregated project pools
-            </span>
+          <div className="rounded-lg border border-afk-border bg-afk-surface p-4">
+            <dt className="text-xs text-afk-secondary">Undistributed entitlements</dt>
+            <dd className="text-xl font-bold tabular-nums text-afk-gold mt-1">{formatBdt(ventureDue)}</dd>
+            <p className="text-2xs text-afk-muted mt-1">Waterfall profit and capital recovery ready to pay out</p>
           </div>
+        </dl>
+      </Card>
 
-          <div className="p-4 rounded-lg bg-afk-surface border border-afk-border">
-            <span className="text-xs text-afk-secondary block">
-              Undistributed Venture Entitlements
-            </span>
-            <span className="text-xl font-bold text-afk-gold block mt-1 tabular-nums">
-              {formatBdt(ventureEntitlements)}
-            </span>
-            <span className="text-2xs text-afk-muted block mt-1">
-              Calculated waterfall profits and capital recovery ready for disbursement
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Fully Detailed Partner Settlement & Distribution History (for everyone) */}
-      <PartnerSettlementHistoryView
-        currentPartner={partner}
-        allStatements={allStatements as any}
-      />
+      <PartnerSettlementHistoryView currentPartner={partner} allStatements={allStatements as any} />
     </div>
   );
 }

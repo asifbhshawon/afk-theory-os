@@ -27,7 +27,7 @@ const config: Config = {
           offwhite: "#F4F5F1",
           secondary: "#B5BDB6",
           muted: "#8E9890",
-          subtle: "#6E7770",
+          subtle: "#868F88",
           cream: "#EAE9E1",
           olive: {
             dark: "#1C241B",
@@ -37,7 +37,7 @@ const config: Config = {
             accent: "#93AA88",
           },
           gold: "#C49A45",
-          danger: "#E05252",
+          danger: "#EB6B6B",
           success: "#3EB465",
           warning: "#E59E27",
         },

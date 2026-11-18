@@ -1,17 +1,8 @@
-import { db } from "@/lib/db";
-import { portalVentures } from "@/lib/schema";
-import { desc } from "drizzle-orm";
+import { Briefcase, CheckCircle2, Lock, Package, TrendingUp } from "lucide-react";
 import { getCurrentPartner, hasVentureAccess } from "@/lib/auth";
-import { formatBdt, formatDate } from "@/lib/format";
-import {
-  Briefcase,
-  Users,
-  Target,
-  TrendingUp,
-  Package,
-  CheckCircle2,
-  Lock,
-} from "lucide-react";
+import { getAllVentures } from "@/lib/portal-data-misc";
+import { formatBdt, formatCompactBdt, formatDate } from "@/lib/format";
+import { Card, EmptyState, PageHeader, Pill, ProgressBar } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -19,192 +10,128 @@ export default async function VenturesPage() {
   const partner = await getCurrentPartner();
   if (!partner) return null;
 
-  const allVentures = await db
-    .select()
-    .from(portalVentures)
-    .orderBy(desc(portalVentures.updatedAt));
-
-  const permittedVentures = allVentures.filter((v) =>
-    hasVentureAccess(partner, v.ventureNumber)
-  );
+  const all = await getAllVentures();
+  const ventures = all.filter((v) => hasVentureAccess(partner, v.ventureNumber));
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="pb-3 border-b border-afk-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-afk-offwhite flex items-center gap-2">
-            <span>Ventures & Dedicated Projects</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-afk-surface border border-afk-border text-afk-olive-accent font-semibold">
-              {permittedVentures.length} Permitted
-            </span>
-          </h1>
-          <p className="text-xs sm:text-sm text-afk-secondary mt-0.5">
-            Independent product drops, seasonal collections, and modular investor agreements
-          </p>
-        </div>
+      <PageHeader
+        title="Ventures & projects"
+        subtitle="Product drops, seasonal collections and investor agreements"
+        badge={<Pill tone="olive">{ventures.length} yours</Pill>}
+      >
+        <p className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-afk-border bg-afk-surface px-3 py-1.5 text-2xs text-afk-muted">
+          <Lock className="w-3.5 h-3.5 text-afk-gold" /> Restricted to your approved agreements
+        </p>
+      </PageHeader>
 
-        <div className="text-2xs text-afk-muted flex items-center gap-1.5 self-start sm:self-auto bg-afk-surface px-3 py-1.5 rounded-lg border border-afk-border">
-          <Lock className="w-3.5 h-3.5 text-afk-gold" />
-          <span>Restricted to your approved venture agreements</span>
-        </div>
-      </div>
-
-      {/* Ventures Cards Grid */}
-      {permittedVentures.length === 0 ? (
-        <div className="bg-afk-card p-12 rounded-xl border border-afk-border text-center">
-          <Briefcase className="w-10 h-10 text-afk-muted mx-auto mb-3" />
-          <h3 className="text-base font-bold text-afk-offwhite">
-            No Permitted Ventures Assigned
-          </h3>
-          <p className="text-xs text-afk-secondary mt-1 max-w-md mx-auto">
-            You do not currently have authorized investor or operational access to active venture projects. Contact the Managing Partner to amend venture participation agreements.
-          </p>
-        </div>
+      {ventures.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={Briefcase}
+            title="No ventures assigned to your account"
+            hint="Ask the managing partner to add you to a venture agreement and it will appear here after the next sync."
+          />
+        </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {permittedVentures.map((venture) => {
-            const participants = Array.isArray(venture.participants)
-              ? venture.participants
-              : [];
-            const myParticipation = participants.find(
-              (p: any) =>
-                p.partnerId === partner.id ||
-                p.name?.toLowerCase() === partner.name?.toLowerCase()
+          {ventures.map((v) => {
+            const mine = v.participants.find(
+              (p) => p.partnerId === partner.id || p.name?.toLowerCase() === partner.name?.toLowerCase()
             );
-
-            const prod = (venture.productionProgress as any) || {};
-            const sales = (venture.salesProgress as any) || {};
+            const prod = v.productionProgress ?? {};
+            const sales = v.salesProgress ?? {};
+            const funded = v.targetBudget > 0 ? (v.actualCashRaised / v.targetBudget) * 100 : 0;
+            const made = prod.plannedQty ? ((prod.completedQty ?? 0) / prod.plannedQty) * 100 : 0;
 
             return (
-              <div
-                key={venture.id}
-                className="bg-afk-card rounded-xl border border-afk-border shadow-sm flex flex-col justify-between overflow-hidden"
-              >
-                {/* Venture Card Header */}
-                <div className="p-5 border-b border-afk-border bg-afk-surface/40">
+              <Card key={v.id} className="overflow-hidden flex flex-col">
+                <header className="p-5 border-b border-afk-border bg-afk-surface/40">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-afk-gold">
-                          {venture.ventureNumber}
-                        </span>
-                        <span className="text-2xs px-2 py-0.5 rounded bg-afk-surface border border-afk-border text-afk-secondary uppercase">
-                          {venture.typeName}
-                        </span>
-                      </div>
-                      <h2 className="text-base font-bold text-afk-offwhite mt-1">
-                        {venture.title}
-                      </h2>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-xs">
+                        <span className="font-mono text-afk-gold">{v.ventureNumber}</span>
+                        <Pill>{v.typeName}</Pill>
+                      </p>
+                      <h2 className="text-base font-bold text-afk-offwhite mt-1.5">{v.title}</h2>
                     </div>
-
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide bg-afk-surface border border-afk-border text-afk-olive-accent shrink-0">
-                      {venture.stage}
-                    </span>
+                    <Pill tone="olive">{v.stage}</Pill>
                   </div>
+                  {v.description && <p className="text-xs text-afk-secondary mt-2 line-clamp-2">{v.description}</p>}
+                </header>
 
-                  {venture.description && (
-                    <p className="text-xs text-afk-secondary mt-2 line-clamp-2">
-                      {venture.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Body Details */}
-                <div className="p-5 space-y-4">
-                  {/* Budget & Funding Grid */}
-                  <div className="grid grid-cols-2 gap-3 text-center">
-                    <div className="p-2.5 rounded-lg bg-afk-surface border border-afk-border">
-                      <span className="text-2xs text-afk-muted uppercase tracking-wider block">Target Budget</span>
-                      <span className="text-sm font-bold text-afk-offwhite block mt-0.5 tabular-nums">
-                        {formatBdt(venture.targetBudget)}
+                <div className="p-5 space-y-5 flex-1">
+                  <div>
+                    <div className="flex items-baseline justify-between text-xs mb-1.5">
+                      <span className="text-afk-secondary">Funding</span>
+                      <span className="font-mono tabular-nums text-afk-offwhite">
+                        {formatCompactBdt(v.actualCashRaised)} <span className="text-afk-muted">of {formatCompactBdt(v.targetBudget)}</span>
                       </span>
                     </div>
-                    <div className="p-2.5 rounded-lg bg-afk-surface border border-afk-border">
-                      <span className="text-2xs text-afk-muted uppercase tracking-wider block">Actual Raised</span>
-                      <span className="text-sm font-bold text-emerald-400 block mt-0.5 tabular-nums">
-                        {formatBdt(venture.actualCashRaised)}
-                      </span>
-                    </div>
+                    <ProgressBar value={funded} />
                   </div>
 
-                  {/* My Participation Highlight */}
-                  {myParticipation && (
-                    <div className="p-3 rounded-lg bg-afk-olive-dark/40 border border-afk-olive/40 space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-afk-offwhite flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-afk-olive-accent" />
-                          <span>My Investor Participation ({partner.name})</span>
+                  {mine && (
+                    <div className="rounded-lg border border-afk-olive/40 bg-afk-olive-dark/40 p-3.5">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-afk-offwhite">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-afk-olive-accent" /> Your participation
                         </span>
-                        <span className="text-2xs font-mono font-bold text-afk-gold uppercase">
-                          {myParticipation.role || "INVESTOR"}
-                        </span>
+                        <span className="font-mono text-2xs font-bold uppercase text-afk-gold">{mine.role || "INVESTOR"}</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 pt-1 text-center text-2xs">
-                        <div>
-                          <span className="text-afk-muted block">Invested:</span>
-                          <span className="font-bold text-afk-offwhite tabular-nums">
-                            {formatBdt(myParticipation.actualCashContributed || myParticipation.committedCapital)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-afk-muted block">Capital %:</span>
-                          <span className="font-bold text-afk-offwhite tabular-nums">
-                            {myParticipation.investmentPercentage || myParticipation.investmentCommitment || "—"}%
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-afk-muted block">Profit Split:</span>
-                          <span className="font-bold text-afk-olive-accent tabular-nums">
-                            {myParticipation.profitSharingPercentage || myParticipation.profitSharePct || "—"}%
-                          </span>
-                        </div>
-                      </div>
+                      <dl className="grid grid-cols-3 gap-2 pt-2.5 text-center">
+                        {[
+                          ["Invested", formatBdt(mine.actualCashContributed || mine.committedCapital || 0)],
+                          ["Capital", `${mine.investmentPercentage ?? mine.investmentCommitment ?? "—"}%`],
+                          ["Profit split", `${mine.profitSharingPercentage ?? mine.profitSharePct ?? "—"}%`],
+                        ].map(([label, value]) => (
+                          <div key={label}>
+                            <dt className="text-2xs text-afk-muted">{label}</dt>
+                            <dd className="text-xs font-bold tabular-nums text-afk-offwhite mt-0.5">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   )}
 
-                  {/* Production & Sales Progress Preview */}
                   {(prod.plannedQty || sales.unitsSold) && (
-                    <div className="p-3 rounded-lg bg-afk-surface border border-afk-border text-2xs space-y-2">
-                      {prod.plannedQty && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-afk-secondary flex items-center gap-1">
-                            <Package className="w-3 h-3 text-afk-gold" />
-                            <span>Production:</span>
-                          </span>
-                          <span className="font-semibold text-afk-offwhite">
-                            {prod.completedQty || 0} / {prod.plannedQty} units ({prod.qcPassRate || 100}% QC pass)
-                          </span>
+                    <div className="space-y-3 rounded-lg border border-afk-border bg-afk-surface p-3.5">
+                      {prod.plannedQty ? (
+                        <div>
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="inline-flex items-center gap-1.5 text-afk-secondary">
+                              <Package className="w-3.5 h-3.5 text-afk-gold" /> Production
+                            </span>
+                            <span className="text-afk-offwhite">
+                              {prod.completedQty ?? 0} / {prod.plannedQty} units · {prod.qcPassRate ?? 100}% QC pass
+                            </span>
+                          </div>
+                          <ProgressBar value={made} tone="gold" />
                         </div>
-                      )}
-                      {sales.unitsSold && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-afk-secondary flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-emerald-400" />
-                            <span>Sales Velocity:</span>
+                      ) : null}
+                      {sales.unitsSold ? (
+                        <p className="flex items-center justify-between text-xs">
+                          <span className="inline-flex items-center gap-1.5 text-afk-secondary">
+                            <TrendingUp className="w-3.5 h-3.5 text-afk-success" /> Sales
                           </span>
-                          <span className="font-semibold text-afk-offwhite">
-                            {sales.unitsSold} sold ({formatBdt(sales.netSales)})
+                          <span className="text-afk-offwhite">
+                            {sales.unitsSold} sold · {formatBdt(sales.netSales ?? 0)}
                           </span>
-                        </div>
-                      )}
+                        </p>
+                      ) : null}
                     </div>
                   )}
 
-                  {/* Performance Summary / Note */}
-                  {venture.performanceSummary && (
-                    <p className="text-2xs text-afk-muted italic border-l-2 border-afk-olive pl-2">
-                      “{venture.performanceSummary}”
-                    </p>
+                  {v.performanceSummary && (
+                    <p className="border-l-2 border-afk-olive pl-3 text-xs italic text-afk-muted">“{v.performanceSummary}”</p>
                   )}
                 </div>
 
-                {/* Footer Dates */}
-                <div className="px-5 py-3 border-t border-afk-border bg-afk-surface/20 flex items-center justify-between text-2xs text-afk-muted">
-                  <span>Start: {formatDate(venture.startDate)}</span>
-                  <span>Target Close: {formatDate(venture.targetDate)}</span>
-                </div>
-              </div>
+                <footer className="flex items-center justify-between border-t border-afk-border bg-afk-surface/20 px-5 py-3 text-2xs text-afk-muted">
+                  <span>Start {formatDate(v.startDate)}</span>
+                  <span>Target close {formatDate(v.targetDate)}</span>
+                </footer>
+              </Card>
             );
           })}
         </div>

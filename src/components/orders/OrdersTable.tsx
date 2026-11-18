@@ -279,12 +279,13 @@ export function OrdersTable({
                     </span>
                   </button>
 
-                  <div className="text-right w-28">
+                  <div className="flex w-full items-center justify-between gap-3 sm:ml-auto sm:w-auto">
+                  <div className="text-left sm:w-28 sm:text-right">
                     <p className="font-mono text-sm font-semibold tabular-nums text-afk-offwhite">{bdt(o.total)}</p>
                     <p className={`text-2xs ${pay.cls}`}>{pay.text}</p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 justify-end ml-auto">
+                  <div className="flex items-center gap-1.5 justify-end">
                     <Link
                       href={`/print/invoice/${o.id}`}
                       target="_blank"
@@ -335,6 +336,7 @@ export function OrdersTable({
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
+                  </div>
                   </div>
                 </div>
               </li>

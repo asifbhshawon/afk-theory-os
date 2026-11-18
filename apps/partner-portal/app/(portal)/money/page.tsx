@@ -16,7 +16,7 @@ import { formatBdt, formatCompactBdt } from "@/lib/format";
 import { AreaChart } from "@/components/charts/AreaChart";
 import { Donut } from "@/components/charts/Donut";
 import { CATEGORY_PALETTE, CHART_COLORS } from "@/components/charts/chart-utils";
-import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
+import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { StatCard } from "@/components/ui/StatCard";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { BarRow, FilterTabs, Pagination, SearchBox } from "@/components/ui/ListControls";
@@ -74,13 +74,9 @@ export default async function MoneyPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-afk-offwhite">Money & cash flow</h1>
-          <p className="text-sm text-afk-secondary mt-0.5">Deposits, expenses, payouts and balances · last {days} days</p>
-        </div>
+      <PageHeader title="Money & cash flow" subtitle={`Deposits, expenses, payouts and balances · last ${days} days`}>
         <PeriodPicker value={days} basePath="/money" params={{ type: baseParams.type, q: baseParams.q }} />
-      </div>
+      </PageHeader>
 
       {!hasData ? (
         <Card>

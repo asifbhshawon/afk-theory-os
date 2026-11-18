@@ -1,4 +1,5 @@
 import { getCurrentPartner } from "@/lib/auth";
+import { PageHeader } from "@/components/ui/primitives";
 import { User, ShieldCheck, Key, Lock, Globe, Bell } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -9,15 +10,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="pb-3 border-b border-afk-border">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-afk-offwhite flex items-center gap-2">
-          <span>Partner Profile & Portal Settings</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-afk-secondary mt-0.5">
-          Manage your executive partner identity, venture access permissions and preferences
-        </p>
-      </div>
+      <PageHeader title="Profile & settings" subtitle="Your partner identity, venture access and preferences" />
 
       {/* Partner Identity Card */}
       <div className="bg-afk-card p-6 rounded-xl border border-afk-border shadow-sm space-y-6">

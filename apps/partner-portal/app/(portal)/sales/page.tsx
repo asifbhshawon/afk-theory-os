@@ -16,7 +16,7 @@ import { formatBdt, formatCompactBdt } from "@/lib/format";
 import { AreaChart } from "@/components/charts/AreaChart";
 import { Donut } from "@/components/charts/Donut";
 import { CATEGORY_PALETTE, CHART_COLORS } from "@/components/charts/chart-utils";
-import { Card, CardHeader, EmptyState, Pill, orderStatusTone } from "@/components/ui/primitives";
+import { Card, CardHeader, EmptyState, PageHeader, Pill, orderStatusTone } from "@/components/ui/primitives";
 import { StatCard } from "@/components/ui/StatCard";
 import { PeriodPicker } from "@/components/ui/PeriodPicker";
 import { BarRow, FilterTabs, Pagination, SearchBox } from "@/components/ui/ListControls";
@@ -95,13 +95,9 @@ export default async function SalesPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-afk-offwhite">Sales</h1>
-          <p className="text-sm text-afk-secondary mt-0.5">Orders, revenue and what is selling · last {days} days</p>
-        </div>
+      <PageHeader title="Sales" subtitle={`Orders, revenue and what is selling · last ${days} days`}>
         <PeriodPicker value={days} basePath="/sales" params={periodParams} />
-      </div>
+      </PageHeader>
 
       {!hasData ? (
         <Card>

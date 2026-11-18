@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
+import { useDialogFocus } from "./useDialogFocus";
 import { X } from "lucide-react";
 
 export function Modal({
@@ -14,6 +15,8 @@ export function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -22,7 +25,9 @@ export function Modal({
 
   return (
     <div
-      className="no-print fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="no-print fixed inset-0 z-50 outline-none flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"

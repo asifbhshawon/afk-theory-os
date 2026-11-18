@@ -60,17 +60,36 @@ Received directly via `/inventory` with SKU variant quantities and costs.
 
 ## 5. Sales Orders & Courier COD Logistics
 
-Go to **Sales & Courier** (`/orders`):
-1. **Order Entry:** Enter customer name, phone number, delivery address, shipping zone (Inside Dhaka / Outside Dhaka), and item variant.
-   - The system immediately reserves the required lot stock with row-level locking to prevent overselling.
-2. **Dispatch & Shipping:** Click **Ship** and enter courier waybill number (e.g. Steadfast / Pathao). Inventory moves to `TRANSIT`.
-3. **Confirmed Delivery & Revenue Recognition:** When courier confirms delivery, click **Confirm Delivered**.
-   - Posts sales revenue, recognizes COGS, and moves total COD amount to `Courier Receivables`.
-4. **Courier Remittance Settlement:** When the courier transfers remittance:
-   - Bank receives net remittance (e.g. ৳930).
-   - Courier delivery expense recorded (e.g. ৳70).
-   - Courier receivables closed (৳1,000).
-5. **Returns & Exchanges:** If an item is returned, process the RMA: choose **Restockable** (returns to inventory) or **Defective** (written off to scrap).
+Go to **Sales & Orders** (`/orders`). Press **N** from anywhere on the page to start a new sale.
+
+1. **New Sale:** type the customer's phone (a returning customer's name and address fill in), then search the product by name, SKU, size or colour. The list shows live stock and fills in the selling price. Add as many items as needed, set channel, delivery zone, delivery charge (remembered per zone), discount and an optional note. **Confirm & reserve stock** reserves the exact lots with row-level locking, so the same unit can never be sold twice. Double-clicking is safe — a repeat submission is recognised and ignored.
+2. **Ship:** click **Ship**, pick the courier and enter the waybill (both required). Stock moves to `TRANSIT`.
+3. **Mark delivered:** when the courier confirms, click **Delivered**. This posts revenue and cost of goods and moves the COD amount to `Courier Receivables`.
+4. **Cancel:** an order that has not been delivered can be cancelled with a reason. The reservation is released (or the parcel's stock is brought back from transit). No revenue was booked, so no journal is needed.
+5. **Courier payout:** open **Courier payouts** at the bottom of the page. Pick the courier, tick the parcels they paid for, correct the COD amount or fee where their statement differs, choose the account and post. One balanced journal records the bank receipt, the courier fees and the cleared receivables. A parcel can only be settled once.
+6. **Returns:** only delivered orders can be returned. Choose **Restockable** (back to finished goods) or **Defective** (written off); the refund cannot exceed the order total.
+
+**Finding and following orders**
+- **List** and **Board** views (keys **L** / **B**): the board shows To ship → With courier → Awaiting payout → Settled → Cancelled/returned, oldest first, and flags parcels that have not moved for too long.
+- Search (**/**) by order number, customer, phone, waybill, courier, SKU or product; filter by channel and period.
+- Click any order for its panel: customer (tap to call, copy delivery details), items, cost and gross profit, courier, full status timeline, linked ledger entries and attached proof (courier slips, delivery photos — **Add proof**).
+
+---
+
+## 5b. Partner Portal (partners' online view)
+
+The portal (`apps/partner-portal`, hosted on Vercel) is a read-only mirror of the local OS. Partners see:
+
+- **Overview:** revenue, orders, net profit and cash with trends, a cash chart, wallet split, things needing attention, latest orders and money movements.
+- **Sales:** KPIs, order pipeline, channels, top products, delivery zones and a searchable orders list with a detail panel and timeline.
+- **Money:** cash in / out, expense breakdown, balances and the full ledger (deposits, expenses, payouts, drawings, transfers).
+- **My Investments, Ventures, Updates, Reports, Calendar & Notes.**
+
+Customer names, phone numbers and addresses never leave the local machine; the portal shows a masked label such as "R. C. · •••000".
+
+**How data gets there.** The local OS pushes changes automatically about 10 seconds after any sale, order update, journal entry or calendar note (and retries if the internet is down). The **Sync Cloud** button forces a push; its pop-over shows *Auto-sync: Up to date / Changes pending / Retrying*. Requirements in the local `.env`: `SUPABASE_DATABASE_URL`; optionally `PARTNER_PORTAL_URL` and `SYNC_SHARED_SECRET` so the Vercel pages refresh instantly (otherwise within an hour). Set `PORTAL_AUTOSYNC=false` to turn automatic pushing off.
+
+**Portal navigation.** Desktop has a sidebar; phones get a bottom bar (Overview, Sales, Money, Mine, More). The pill at the top shows how fresh the data is — a quiet day without changes is normal.
 
 ---
 
