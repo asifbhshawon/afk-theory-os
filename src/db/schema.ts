@@ -296,6 +296,7 @@ export const productVariants = pgTable(
     costPrice: numeric("cost_price", { precision: 18, scale: 2 }).notNull().default("0.00"),
     sellingPrice: numeric("selling_price", { precision: 18, scale: 2 }).notNull().default("0.00"),
     reorderLevel: integer("reorder_level").notNull().default(10),
+    inStockWithoutCount: boolean("in_stock_without_count").notNull().default(false),
   },
   (table) => [index("variants_product_idx").on(table.productId)]
 );

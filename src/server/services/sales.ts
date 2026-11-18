@@ -12,6 +12,7 @@ import {
   courierSettlementLines,
   returnsAndExchanges,
   productVariants,
+  products,
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { postJournalEntry } from "./finance";
@@ -36,6 +37,7 @@ export interface CreateSalesOrderInput {
   notes?: string;
   userId?: string;
   idempotencyKey?: string;
+  allowBackorder?: boolean;
 }
 
 // Generate unique sequential order number backed by atomic PostgreSQL sequence (concurrency-safe)
@@ -69,7 +71,7 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
       .limit(1);
 
     if (existingOrder) {
-      return { order: existingOrder, isDuplicate: true };
+      return { order: existingOrder, lines: [], isDuplicate: true };
     }
   }
 
@@ -143,9 +145,46 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
       }
 
       if (remainingToReserve > 0) {
-        throw new Error(
-          `Out of stock for SKU. Requested: ${line.quantity}, unavailable: ${remainingToReserve}`
-        );
+        const [variant] = await tx
+          .select()
+          .from(productVariants)
+          .where(eq(productVariants.id, line.variantId))
+          .limit(1);
+
+        if (!input.allowBackorder && !variant?.inStockWithoutCount) {
+          const [v] = await tx
+            .select({
+              sku: productVariants.sku,
+              size: productVariants.size,
+              color: productVariants.color,
+              productName: products.name,
+            })
+            .from(productVariants)
+            .leftJoin(products, eq(productVariants.productId, products.id))
+            .where(eq(productVariants.id, line.variantId))
+            .limit(1);
+
+          const skuLabel = v ? `${v.productName} - ${v.color}/${v.size} (${v.sku})` : line.variantId;
+          const availableCount = line.quantity - remainingToReserve;
+
+          throw new Error(
+            `Out of stock for SKU "${skuLabel}". Requested: ${line.quantity}, available in stock: ${availableCount}. Enable "Allow Pre-order / Backorder" to create without stock reservation, or receive inventory first.`
+          );
+        }
+
+        // Backorder / Pre-order / Uncounted In-Stock allowed: allocate unreserved balance with lotId: null
+        const lineProportion = remainingToReserve / line.quantity;
+        const lineTotal = remainingToReserve * line.unitPrice - (line.discount || 0) * lineProportion;
+
+        reservedLines.push({
+          variantId: line.variantId,
+          lotId: null as any,
+          quantity: remainingToReserve,
+          unitPrice: line.unitPrice,
+          discount: (line.discount || 0) * lineProportion,
+          totalPrice: lineTotal,
+          cogsUnitCost: variant ? Number(variant.costPrice || 0) : 0,
+        });
       }
     }
 
