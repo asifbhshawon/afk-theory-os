@@ -41,6 +41,8 @@ export interface QuickSaleInput {
   deliveryCharge: number;
   discount: number;
   notes?: string;
+  /** sell without (enough) counted stock — pre-order / backorder */
+  allowBackorder?: boolean;
   idempotencyKey: string;
 }
 
@@ -73,6 +75,7 @@ export async function createOrderAction(
       discount: Number(input.discount) || 0,
       paymentMethod: "COD",
       notes: input.notes?.trim() || undefined,
+      allowBackorder: !!input.allowBackorder,
       idempotencyKey: input.idempotencyKey,
       userId: user.id,
     });
@@ -82,6 +85,8 @@ export async function createOrderAction(
       ok: true,
       message: res.isDuplicate
         ? `Order ${res.order.orderNumber} was already created.`
+        : res.lines.some((l) => !l.lotId)
+        ? `Order ${res.order.orderNumber} created as a pre-order — units without stock were not reserved.`
         : `Order ${res.order.orderNumber} created and stock reserved.`,
       data: {
         orderId: res.order.id,

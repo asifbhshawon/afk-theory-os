@@ -12,9 +12,10 @@ import {
   courierSettlementLines,
   returnsAndExchanges,
   productVariants,
+  products,
 } from "@/db/schema";
 import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
-import { products, auditLogs, journalEntries } from "@/db/schema";
+import { auditLogs, journalEntries } from "@/db/schema";
 import { loadOrderTimelines } from "./order-timeline";
 import { postJournalEntry } from "./finance";
 import { schedulePortalSync } from "./portal-autosync";
@@ -44,6 +45,7 @@ export interface CreateSalesOrderInput {
   notes?: string;
   userId?: string;
   idempotencyKey?: string;
+  allowBackorder?: boolean;
 }
 
 // Generate unique sequential order number backed by atomic PostgreSQL sequence (concurrency-safe)
@@ -91,7 +93,7 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
       .limit(1);
 
     if (existingOrder) {
-      return { order: existingOrder, isDuplicate: true };
+      return { order: existingOrder, lines: [], isDuplicate: true };
     }
   }
 
@@ -165,16 +167,46 @@ export async function createSalesOrder(input: CreateSalesOrderInput) {
       }
 
       if (remainingToReserve > 0) {
-        const [v] = await tx
-          .select({ sku: productVariants.sku })
+        const [variant] = await tx
+          .select()
           .from(productVariants)
           .where(eq(productVariants.id, line.variantId))
           .limit(1);
-        throw new Error(
-          `Not enough stock for ${v?.sku ?? "SKU"}. Requested ${line.quantity}, only ${
-            line.quantity - remainingToReserve
-          } available.`
-        );
+
+        if (!input.allowBackorder && !variant?.inStockWithoutCount) {
+          const [v] = await tx
+            .select({
+              sku: productVariants.sku,
+              size: productVariants.size,
+              color: productVariants.color,
+              productName: products.name,
+            })
+            .from(productVariants)
+            .leftJoin(products, eq(productVariants.productId, products.id))
+            .where(eq(productVariants.id, line.variantId))
+            .limit(1);
+
+          const skuLabel = v ? `${v.productName} - ${v.color}/${v.size} (${v.sku})` : line.variantId;
+          const availableCount = line.quantity - remainingToReserve;
+
+          throw new Error(
+            `Out of stock for SKU "${skuLabel}". Requested: ${line.quantity}, available in stock: ${availableCount}. Enable "Allow Pre-order / Backorder" to create without stock reservation, or receive inventory first.`
+          );
+        }
+
+        // Backorder / Pre-order / Uncounted In-Stock allowed: allocate unreserved balance with lotId: null
+        const lineProportion = remainingToReserve / line.quantity;
+        const lineTotal = remainingToReserve * line.unitPrice - (line.discount || 0) * lineProportion;
+
+        reservedLines.push({
+          variantId: line.variantId,
+          lotId: null as any,
+          quantity: remainingToReserve,
+          unitPrice: line.unitPrice,
+          discount: (line.discount || 0) * lineProportion,
+          totalPrice: lineTotal,
+          cogsUnitCost: variant ? Number(variant.costPrice || 0) : 0,
+        });
       }
     }
 
@@ -886,6 +918,7 @@ export async function listSellableVariants() {
       sellingPrice: productVariants.sellingPrice,
       costPrice: productVariants.costPrice,
       retailPrice: products.retailPrice,
+      uncounted: productVariants.inStockWithoutCount,
       available: sql<number>`COALESCE(SUM(${inventoryLots.currentQuantity} - ${inventoryLots.reservedQuantity}) FILTER (WHERE ${inventoryLots.status} = 'ACTIVE'), 0)::int`,
     })
     .from(productVariants)
@@ -908,6 +941,8 @@ export async function listSellableVariants() {
       price: selling > 0 ? selling : Number(r.retailPrice),
       cost: Number(r.costPrice),
       available: Math.max(0, Number(r.available)),
+      // flagged "in stock without a count": always sellable, no lot reservation needed
+      uncounted: !!r.uncounted,
     };
   });
 }

@@ -198,7 +198,8 @@ describe("Sync v2: portal sales / money read model", () => {
       const cancelled = model.orders.find((o) => o.id === orderIds.cancelled)!;
 
       expect(delivered.units).toBe(2);
-      expect(delivered.items[0].sku).toBe(`AFK-RM-M-${stamp}`);
+      // SKUs are normalised to upper case by the catalog service
+      expect(delivered.items[0].sku).toBe(`AFK-RM-M-${stamp}`.toUpperCase());
       expect(delivered.cogs).toBe(500);
       expect(delivered.profit).toBe(2100 - 100 - 500);
       expect(delivered.channel).toBe("FACEBOOK");

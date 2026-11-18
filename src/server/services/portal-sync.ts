@@ -206,6 +206,53 @@ export interface PortalSyncResult {
   syncCursor: string;
 }
 
+/**
+ * Low / out-of-stock alerts per SKU across ALL active lots, worst first.
+ * Only sellable goods count (not raw material / consumables), and variants flagged
+ * "in stock without a count" are intentionally untracked, so they never alert.
+ * `limit` caps what is pushed to the portal; tests pass a large value.
+ */
+export async function buildLowStockAlerts(limit = 50) {
+  const stockRows = await db
+    .select({
+      variantId: productVariants.id,
+      sku: productVariants.sku,
+      productName: products.name,
+      size: productVariants.size,
+      color: productVariants.color,
+      reorderLevel: productVariants.reorderLevel,
+      available: sql<number>`COALESCE(SUM(${inventoryLots.currentQuantity} - ${inventoryLots.reservedQuantity}) FILTER (WHERE ${inventoryLots.status} = 'ACTIVE'), 0)::int`,
+    })
+    .from(productVariants)
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .leftJoin(inventoryLots, eq(inventoryLots.variantId, productVariants.id))
+    .where(
+      and(
+        eq(products.status, "ACTIVE"),
+        inArray(products.productType, ["FINISHED_GARMENT", "BLANK"]),
+        // variants flagged "in stock without a count" are intentionally untracked — no alerts
+        eq(productVariants.inStockWithoutCount, false)
+      )
+    )
+    .groupBy(productVariants.id, products.name);
+
+  return stockRows
+    .map((r) => ({ ...r, available: Number(r.available) }))
+    .filter((r) => r.available <= r.reorderLevel)
+    .sort((a, b) => a.available - b.available)
+    .slice(0, limit)
+    .map((r) => ({
+      id: r.variantId,
+      sku: r.sku,
+      productName: r.productName,
+      size: r.size,
+      color: r.color,
+      currentQuantity: Math.max(0, r.available),
+      reorderLevel: r.reorderLevel,
+      status: r.available <= 0 ? "OUT_OF_STOCK" : "LOW_STOCK",
+    }));
+}
+
 // Compile a sanitized, permission-scoped summary payload from local ERP
 export async function buildSanitizedPushPayload() {
   const statements = await getFinancialStatements();
@@ -377,45 +424,8 @@ export async function buildSanitizedPushPayload() {
     ventureId: b.ventureId || undefined,
   }));
 
-  // 6. Inventory low-stock alerts — computed per SKU across ALL active lots
-  // (previously: first 10 lots only, then filtered, so most alerts were missed).
-  // Only sellable goods are considered (not raw material / consumables).
-  const stockRows = await db
-    .select({
-      variantId: productVariants.id,
-      sku: productVariants.sku,
-      productName: products.name,
-      size: productVariants.size,
-      color: productVariants.color,
-      reorderLevel: productVariants.reorderLevel,
-      available: sql<number>`COALESCE(SUM(${inventoryLots.currentQuantity} - ${inventoryLots.reservedQuantity}) FILTER (WHERE ${inventoryLots.status} = 'ACTIVE'), 0)::int`,
-    })
-    .from(productVariants)
-    .innerJoin(products, eq(productVariants.productId, products.id))
-    .leftJoin(inventoryLots, eq(inventoryLots.variantId, productVariants.id))
-    .where(
-      and(
-        eq(products.status, "ACTIVE"),
-        inArray(products.productType, ["FINISHED_GARMENT", "BLANK"])
-      )
-    )
-    .groupBy(productVariants.id, products.name);
-
-  const lowStockAlerts = stockRows
-    .map((r) => ({ ...r, available: Number(r.available) }))
-    .filter((r) => r.available <= r.reorderLevel)
-    .sort((a, b) => a.available - b.available)
-    .slice(0, 50)
-    .map((r) => ({
-      id: r.variantId,
-      sku: r.sku,
-      productName: r.productName,
-      size: r.size,
-      color: r.color,
-      currentQuantity: Math.max(0, r.available),
-      reorderLevel: r.reorderLevel,
-      status: r.available <= 0 ? "OUT_OF_STOCK" : "LOW_STOCK",
-    }));
+  // 6. Inventory low-stock alerts (see buildLowStockAlerts)
+  const lowStockAlerts = await buildLowStockAlerts();
 
   // 7. Sanitized activity feed (derived from recent posted journals and audit logs)
   const recentJournals = await db

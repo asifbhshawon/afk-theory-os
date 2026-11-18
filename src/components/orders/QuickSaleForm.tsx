@@ -49,6 +49,7 @@ export function QuickSaleForm({
   const [query, setQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [allowBackorder, setAllowBackorder] = useState(false);
 
   // "N" jumps to a fresh sale from anywhere on the page (ignored while typing or in a dialog)
   useEffect(() => {
@@ -107,13 +108,19 @@ export function QuickSaleForm({
     return list.slice(0, 8);
   }, [variants, query]);
 
+  // units that can be sold without a pre-order: counted stock, or unlimited for "in stock without a count" items
+  const maxQty = (v: SellableVariant) => (v.uncounted || allowBackorder ? 9999 : Math.max(1, v.available));
+  const shortBy = (l: CartLine) => {
+    const v = variantById.get(l.variantId);
+    return !v || v.uncounted ? 0 : Math.max(0, l.qty - v.available);
+  };
+
   function addVariant(v: SellableVariant) {
-    if (v.available <= 0) return;
     setCart((prev) => {
       const existing = prev.find((l) => l.variantId === v.id);
       if (existing) {
         return prev.map((l) =>
-          l.variantId === v.id ? { ...l, qty: Math.min(v.available, l.qty + 1) } : l
+          l.variantId === v.id ? { ...l, qty: Math.min(maxQty(v), l.qty + 1) } : l
         );
       }
       return [...prev, { variantId: v.id, qty: 1, price: v.price }];
@@ -134,14 +141,14 @@ export function QuickSaleForm({
   const total = Math.max(0, subtotal + deliveryNum - discountNum);
   const profit = subtotal - discountNum - cost;
 
-  const overStock = cart.find((l) => l.qty > (variantById.get(l.variantId)?.available ?? 0));
+  const needsBackorder = cart.some((l) => shortBy(l) > 0);
   const missing =
     cart.length === 0
       ? "Add at least one item"
       : !name.trim() || !phone.trim() || !address.trim()
       ? "Customer name, phone and address are required"
-      : overStock
-      ? "A line exceeds available stock"
+      : needsBackorder && !allowBackorder
+      ? "Some items are not in stock — tick “Allow pre-order” below to sell them anyway"
       : null;
 
   function reset() {
@@ -151,6 +158,7 @@ export function QuickSaleForm({
     setDiscount("");
     setNotes("");
     setCart([]);
+    setAllowBackorder(false);
     setFormError(null);
     idemKey.current = newKey();
   }
@@ -173,6 +181,7 @@ export function QuickSaleForm({
         deliveryCharge: deliveryNum,
         discount: discountNum,
         notes,
+        allowBackorder: needsBackorder && allowBackorder,
         idempotencyKey: idemKey.current,
       });
       if (res.ok) {
@@ -290,7 +299,7 @@ export function QuickSaleForm({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    const first = matches.find((v) => v.available > 0);
+                    const first = matches.find((v) => v.uncounted || v.available > 0) ?? matches[0];
                     if (first) addVariant(first);
                   }
                 }}
@@ -304,15 +313,14 @@ export function QuickSaleForm({
                   <li className="px-3 py-3 text-xs text-afk-muted">No matching products.</li>
                 )}
                 {matches.map((v) => {
-                  const out = v.available <= 0;
+                  const out = v.available <= 0 && !v.uncounted;
                   return (
                     <li key={v.id}>
                       <button
                         type="button"
-                        disabled={out}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => addVariant(v)}
-                        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-afk-surfaceLight disabled:opacity-45 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-afk-surfaceLight"
                       >
                         <span className="min-w-0">
                           <span className="block text-sm text-afk-offwhite truncate">{v.productName}</span>
@@ -324,10 +332,10 @@ export function QuickSaleForm({
                           <span className="block text-sm font-mono text-afk-offwhite">{bdt(v.price)}</span>
                           <span
                             className={`block text-xs ${
-                              out ? "text-afk-danger" : v.available <= 3 ? "text-afk-warning" : "text-afk-olive-accent"
+                              out ? "text-afk-warning" : v.uncounted || v.available > 3 ? "text-afk-olive-accent" : "text-afk-warning"
                             }`}
                           >
-                            {out ? "Out of stock" : `${v.available} in stock`}
+                            {out ? "Out of stock · pre-order" : v.uncounted ? "In stock" : `${v.available} in stock`}
                           </span>
                         </span>
                       </button>
@@ -349,14 +357,16 @@ export function QuickSaleForm({
                 {cart.map((l) => {
                   const v = variantById.get(l.variantId);
                   if (!v) return null;
-                  const tooMany = l.qty > v.available;
+                  const short = shortBy(l);
                   return (
                     <li key={l.variantId} className="px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                       <div className="flex-1 min-w-[10rem]">
                         <p className="text-sm text-afk-offwhite leading-tight">{v.productName}</p>
                         <p className="text-xs text-afk-muted font-mono">
                           {v.sku} · {v.size}/{v.color} ·{" "}
-                          <span className={tooMany ? "text-afk-danger" : ""}>{v.available} available</span>
+                          <span className={short > 0 ? (allowBackorder ? "text-afk-warning" : "text-afk-danger") : ""}>
+                            {v.uncounted ? "in stock" : short > 0 ? `${v.available} in stock · ${short} pre-order` : `${v.available} available`}
+                          </span>
                         </p>
                       </div>
                       <div className="flex items-center rounded-lg border border-afk-border bg-afk-input">
@@ -372,7 +382,7 @@ export function QuickSaleForm({
                         <button
                           type="button"
                           aria-label="Increase quantity"
-                          onClick={() => updateLine(l.variantId, { qty: Math.min(v.available, l.qty + 1) })}
+                          onClick={() => updateLine(l.variantId, { qty: Math.min(maxQty(v), l.qty + 1) })}
                           className="p-2 text-afk-secondary hover:text-afk-offwhite"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -443,6 +453,24 @@ export function QuickSaleForm({
               />
             </div>
           </div>
+
+          {needsBackorder && (
+            <label className="flex items-start gap-2.5 rounded-lg border border-afk-warning/40 bg-afk-warning/10 px-3.5 py-3 text-xs text-afk-offwhite cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowBackorder}
+                onChange={(e) => setAllowBackorder(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-[#E59E27]"
+              />
+              <span>
+                <span className="font-semibold">Allow pre-order / backorder</span>
+                <span className="block text-afk-secondary mt-0.5">
+                  The missing units are sold without reserving stock (cost falls back to the product cost price). Receive the
+                  inventory before shipping.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Totals + submit */}
           <div className="flex flex-wrap items-end justify-between gap-4 pt-1">

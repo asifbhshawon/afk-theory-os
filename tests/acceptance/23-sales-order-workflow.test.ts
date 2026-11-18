@@ -13,7 +13,7 @@ import {
   listSellableVariants,
   listRecentOrdersWithItems,
 } from "@/server/services/sales";
-import { buildSanitizedPushPayload } from "@/server/services/portal-sync";
+import { buildSanitizedPushPayload, buildLowStockAlerts } from "@/server/services/portal-sync";
 import { getFinancialStatements } from "@/server/services/finance";
 
 async function setup(qty: number) {
@@ -112,7 +112,7 @@ describe("Sales order workflow: multi-line, cancel, guards, sync accuracy", () =
     ).rejects.toThrow(/negative/);
     await expect(
       createSalesOrder({ ...cust, lines: [{ variantId: variants[0].id, quantity: 9, unitPrice: 1000 }] })
-    ).rejects.toThrow(/Not enough stock for AFK-WF-M-/);
+    ).rejects.toThrow(/Out of stock for SKU .*AFK-WF-M-/);
   });
 
   it("cancelling a CONFIRMED order releases the reservation and blocks further actions", async () => {
@@ -194,9 +194,11 @@ describe("Sales order workflow: multi-line, cancel, guards, sync accuracy", () =
     const { variants } = await setup(2);
     await createSalesOrder({ ...cust, lines: [{ variantId: variants[1].id, quantity: 2, unitPrice: 1000 }] });
 
+    // uncapped list: the pushed list is capped at 50 and this database accumulates data across runs
+    const alerts = await buildLowStockAlerts(100_000);
     const { payload } = await buildSanitizedPushPayload();
-    const m = payload.inventoryAlerts.find((a: any) => a.id === variants[0].id);
-    const l = payload.inventoryAlerts.find((a: any) => a.id === variants[1].id);
+    const m = alerts.find((a: any) => a.id === variants[0].id);
+    const l = alerts.find((a: any) => a.id === variants[1].id);
     expect(m?.status).toBe("LOW_STOCK");
     expect(m?.currentQuantity).toBe(2);
     expect(l?.status).toBe("OUT_OF_STOCK");

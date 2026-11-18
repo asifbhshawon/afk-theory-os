@@ -269,3 +269,9 @@ Order matters: **0 → 1 → 3 → 4 → 5** gives partners live sales/money dat
 - **Docs:** user guide rewritten for the new sales workflow and a new Partner Portal section (auto-sync, env vars, privacy).
 - Housekeeping: fixed the long-standing TypeScript error in acceptance test 15 — `tsc` is now fully clean for both apps.
 - **Final verification:** root tests 121/123 (the 2 failures need a live Supabase URL), portal tests 15/15, `tsc` clean for both apps, production `next build` passes for both (portal pages 108–121 kB first-load JS, ERP orders 137 kB).
+
+**Merge with the catalog / inventory work (18 Nov)**
+- The main checkout held ~5 days of uncommitted work (catalog variant matrix, editable stock, "in stock without a count", pre-orders, migration 0004). It was preserved untouched on branch `wip/catalog-inventory-orders` (35d0b14) and merged here.
+- Conflicts were only on the orders screen, which both lines had rewritten. Resolution: **my workspace UI kept**, their old single-line `OrdersWorkspaceClient` removed, and their capabilities ported into it: pre-order checkbox in the quick-sale form (`allowBackorder`), uncounted variants sellable without a tick, descriptive "Out of stock for SKU …" error from the service, `listSellableVariants().uncounted`, and no portal low-stock alerts for uncounted variants. Inventory page/service, `lib/catalog.ts` and migration 0004 came through unchanged.
+- `buildLowStockAlerts(limit)` extracted so tests no longer depend on the 50-item cap of the pushed list.
+- Tests: their two suites plus new `27-preorder-in-sales-workspace`; full run on a scratch database 137/139 (the 2 failures need a live Supabase URL).
