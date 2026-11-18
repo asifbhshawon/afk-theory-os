@@ -197,3 +197,44 @@ export async function settleCourierAction(input: {
     return fail(err);
   }
 }
+
+/** Settles several delivered orders of one courier in a single payout journal. */
+export async function settleCourierBatchAction(input: {
+  courierId: string;
+  paymentAccountId: string;
+  items: { orderId: string; codAmount: number; courierFee: number }[];
+  notes?: string;
+}): Promise<ActionResult<{ settlementNumber: string; net: number; orders: number }>> {
+  try {
+    const user = await requireRole(SALES_ROLES);
+    if (!input.courierId) return { ok: false, error: "Choose the courier who paid out." };
+    if (!input.paymentAccountId) return { ok: false, error: "Choose the account the money was deposited into." };
+    if (!input.items?.length) return { ok: false, error: "Tick at least one delivered order." };
+
+    const settlement = await settleCourierRemittance({
+      courierId: input.courierId,
+      paymentAccountId: input.paymentAccountId,
+      settlements: input.items.map((i) => ({
+        salesOrderId: i.orderId,
+        codAmount: Number(i.codAmount),
+        courierFee: Number(i.courierFee) || 0,
+      })),
+      notes: input.notes?.trim() || undefined,
+      userId: user.id,
+    });
+    refresh();
+    return {
+      ok: true,
+      message: `${settlement.settlementNumber} posted — ${input.items.length} order${input.items.length === 1 ? "" : "s"}, net ${Number(
+        settlement.netAmountReceived
+      ).toLocaleString("en-BD")} deposited.`,
+      data: {
+        settlementNumber: settlement.settlementNumber,
+        net: Number(settlement.netAmountReceived),
+        orders: input.items.length,
+      },
+    };
+  } catch (err) {
+    return fail(err);
+  }
+}

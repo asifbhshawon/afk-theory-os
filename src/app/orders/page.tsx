@@ -3,6 +3,7 @@ import { contacts, paymentAccounts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { listRecentOrdersWithItems, listSellableVariants } from "@/server/services/sales";
+import { getEvidenceForEntities } from "@/server/services/evidence";
 import { OrdersWorkspace } from "@/components/orders/OrdersWorkspace";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function OrdersPage() {
   const canWrite = !!user && (user.isAdmin || user.roles.includes("SALES_OP"));
 
   const [orders, variants, couriers, payAccounts] = await Promise.all([
-    listRecentOrdersWithItems(100),
+    listRecentOrdersWithItems(300),
     listSellableVariants(),
     db
       .select({ id: contacts.id, name: contacts.name })
@@ -24,6 +25,12 @@ export default async function OrdersPage() {
       .from(paymentAccounts)
       .where(eq(paymentAccounts.isActive, true)),
   ]);
+
+  // proof (courier slips, delivery photos) attached to each order
+  const evidence = await getEvidenceForEntities(
+    "SALES_ORDER",
+    orders.map((o) => o.id)
+  );
 
   return (
     <div className="space-y-6">
@@ -44,6 +51,7 @@ export default async function OrdersPage() {
 
       <OrdersWorkspace
         orders={orders}
+        evidence={evidence}
         variants={variants}
         couriers={couriers}
         payAccounts={payAccounts}

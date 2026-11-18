@@ -20,6 +20,7 @@ import {
 } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { makeCustomerRedactor } from "./portal-sync";
+import { loadOrderTimelines } from "./order-timeline";
 
 // =============================================================================
 // Sales / money read model for the Partner Portal (cloud side).
@@ -247,32 +248,7 @@ export async function buildPortalOrders(since: Date): Promise<PortalOrderRow[]> 
   const couriers = await db.select({ id: contacts.id, name: contacts.name }).from(contacts).where(eq(contacts.type, "COURIER"));
   const courierName = new Map(couriers.map((c) => [c.id, c.name]));
 
-  // --- status timeline sources -------------------------------------------
-  const [transit] = await db.select().from(locations).where(eq(locations.code, "TRANSIT")).limit(1);
-  const movements = await db
-    .select({
-      ref: stockMovements.referenceId,
-      type: stockMovements.movementType,
-      to: stockMovements.toLocationId,
-      at: stockMovements.createdAt,
-    })
-    .from(stockMovements)
-    .where(and(eq(stockMovements.referenceType, "ORDER"), gte(stockMovements.createdAt, since)));
-
-  const settled = await db
-    .select({ orderId: courierSettlementLines.salesOrderId, at: courierSettlements.settlementDate })
-    .from(courierSettlementLines)
-    .innerJoin(courierSettlements, eq(courierSettlementLines.courierSettlementId, courierSettlements.id));
-  const returned = await db
-    .select({ orderId: returnsAndExchanges.salesOrderId, at: returnsAndExchanges.returnDate })
-    .from(returnsAndExchanges);
-  const cancelled = await db
-    .select({ orderId: auditLogs.entityId, at: auditLogs.createdAt })
-    .from(auditLogs)
-    .where(and(eq(auditLogs.entityType, "ORDER"), sql`${auditLogs.details} ILIKE '%cancelled%'`, gte(auditLogs.createdAt, since)));
-
-  const earliest = <T extends { at: Date }>(rows: T[]) =>
-    rows.length ? new Date(Math.min(...rows.map((r) => r.at.getTime()))) : null;
+  const timelines = await loadOrderTimelines(orders, since);
 
   return orders
     .map((o): PortalOrderRow => {
@@ -292,25 +268,6 @@ export async function buildPortalOrders(since: Date): Promise<PortalOrderRow[]> 
         .reduce((s, l) => s + l.quantity * Number(l.cogsUnitCost), 0);
       const total = Number(o.totalAmount);
       const delivery = Number(o.deliveryCharge);
-
-      const mine = movements.filter((m) => m.ref === o.orderNumber);
-      const shippedAt = earliest(mine.filter((m) => m.type === "TRANSFER" && transit && m.to === transit.id));
-      const deliveredAt = earliest(mine.filter((m) => m.type === "FULFILLMENT"));
-      const settledAt = earliest(settled.filter((s) => s.orderId === o.id));
-      const returnedAt = earliest(returned.filter((r) => r.orderId === o.id));
-      const cancelledAt = earliest(cancelled.filter((c) => c.orderId === o.id));
-
-      const timeline = [
-        { status: "CONFIRMED", at: o.orderDate },
-        shippedAt && { status: "SHIPPED", at: shippedAt },
-        deliveredAt && { status: "DELIVERED", at: deliveredAt },
-        settledAt && { status: "SETTLED", at: settledAt },
-        returnedAt && { status: "RETURNED", at: returnedAt },
-        cancelledAt && { status: "CANCELLED", at: cancelledAt },
-      ]
-        .filter((t): t is { status: string; at: Date } => !!t)
-        .sort((a, b) => a.at.getTime() - b.at.getTime())
-        .map((t) => ({ status: t.status, at: t.at.toISOString() }));
 
       return {
         id: o.id,
@@ -332,7 +289,7 @@ export async function buildPortalOrders(since: Date): Promise<PortalOrderRow[]> 
         waybillNumber: o.waybillNumber,
         customerLabel: customerLabel(o.customerName, o.customerPhone),
         items,
-        timeline,
+        timeline: timelines.get(o.id) ?? [],
       };
     })
     .sort((a, b) => b.orderDate.localeCompare(a.orderDate));

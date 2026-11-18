@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Loader2, Minus, Plus, Search, ShoppingBag, Trash2, UserCheck } from "lucide-react";
 import { createOrderAction } from "@/app/orders/actions";
 import { inputCls, labelCls, primaryBtn } from "./Modal";
@@ -49,6 +49,22 @@ export function QuickSaleForm({
   const [query, setQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // "N" jumps to a fresh sale from anywhere on the page (ignored while typing or in a dialog)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "n" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      const phone = document.getElementById("qs-phone");
+      phone?.scrollIntoView({ block: "center", behavior: "smooth" });
+      phone?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const variantById = useMemo(() => new Map(variants.map((v) => [v.id, v])), [variants]);
 

@@ -14,7 +14,8 @@ import {
   productVariants,
 } from "@/db/schema";
 import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
-import { products, auditLogs } from "@/db/schema";
+import { products, auditLogs, journalEntries } from "@/db/schema";
+import { loadOrderTimelines } from "./order-timeline";
 import { postJournalEntry } from "./finance";
 import { schedulePortalSync } from "./portal-autosync";
 
@@ -485,6 +486,9 @@ export async function settleCourierRemittance(data: {
     if (so.paymentStatus === "PAID") {
       throw new Error(`Order ${so.orderNumber} is already settled.`);
     }
+    if (so.courierId && so.courierId !== data.courierId) {
+      throw new Error(`Order ${so.orderNumber} was shipped with a different courier than ${courier.name}.`);
+    }
   }
   if (settleOrders.length !== new Set(data.settlements.map((s) => s.salesOrderId)).size) {
     throw new Error("One or more orders to settle were not found.");
@@ -908,29 +912,59 @@ export async function listSellableVariants() {
   });
 }
 
-// Recent orders with their line items and gross profit, for the orders workspace.
+// Recent orders with line items, gross profit, status timeline and linked
+// journals — everything the orders workspace and its detail panel show.
 export async function listRecentOrdersWithItems(limit = 100) {
   const orders = await db.select().from(salesOrders).orderBy(desc(salesOrders.orderDate)).limit(limit);
   if (orders.length === 0) return [];
 
-  const lines = await db
-    .select({
-      salesOrderId: salesLines.salesOrderId,
-      quantity: salesLines.quantity,
-      unitPrice: salesLines.unitPrice,
-      totalPrice: salesLines.totalPrice,
-      cogsUnitCost: salesLines.cogsUnitCost,
-      sku: productVariants.sku,
-      size: productVariants.size,
-      color: productVariants.color,
-      productName: products.name,
-    })
-    .from(salesLines)
-    .innerJoin(productVariants, eq(salesLines.variantId, productVariants.id))
-    .innerJoin(products, eq(productVariants.productId, products.id))
-    .where(inArray(salesLines.salesOrderId, orders.map((o) => o.id)));
+  const ids = orders.map((o) => o.id);
+  const since = new Date(Math.min(...orders.map((o) => o.orderDate.getTime())) - 86_400_000);
 
-  const couriers = await db.select({ id: contacts.id, name: contacts.name }).from(contacts).where(eq(contacts.type, "COURIER"));
+  const [lines, couriers, timelines, orderJournals, settlementJournals] = await Promise.all([
+    db
+      .select({
+        salesOrderId: salesLines.salesOrderId,
+        quantity: salesLines.quantity,
+        unitPrice: salesLines.unitPrice,
+        totalPrice: salesLines.totalPrice,
+        cogsUnitCost: salesLines.cogsUnitCost,
+        sku: productVariants.sku,
+        size: productVariants.size,
+        color: productVariants.color,
+        productName: products.name,
+      })
+      .from(salesLines)
+      .innerJoin(productVariants, eq(salesLines.variantId, productVariants.id))
+      .innerJoin(products, eq(productVariants.productId, products.id))
+      .where(inArray(salesLines.salesOrderId, ids)),
+    db.select({ id: contacts.id, name: contacts.name }).from(contacts).where(eq(contacts.type, "COURIER")),
+    loadOrderTimelines(orders, since),
+    // revenue / COGS / return journals reference the order by sourceId
+    db
+      .select({
+        sourceId: journalEntries.sourceId,
+        number: journalEntries.entryNumber,
+        description: journalEntries.description,
+        date: journalEntries.date,
+        status: journalEntries.status,
+      })
+      .from(journalEntries)
+      .where(inArray(journalEntries.sourceId, ids)),
+    // courier payout journals reach the order through the settlement lines
+    db
+      .select({
+        orderId: courierSettlementLines.salesOrderId,
+        number: journalEntries.entryNumber,
+        description: journalEntries.description,
+        date: journalEntries.date,
+        status: journalEntries.status,
+      })
+      .from(courierSettlementLines)
+      .innerJoin(courierSettlements, eq(courierSettlementLines.courierSettlementId, courierSettlements.id))
+      .innerJoin(journalEntries, eq(courierSettlements.journalEntryId, journalEntries.id))
+      .where(inArray(courierSettlementLines.salesOrderId, ids)),
+  ]);
   const courierName = new Map(couriers.map((c) => [c.id, c.name]));
 
   return orders.map((o) => {
@@ -948,6 +982,19 @@ export async function listRecentOrdersWithItems(limit = 100) {
       }));
     const cogs = items.reduce((s, i) => s + i.cogs, 0);
     const total = Number(o.totalAmount);
+
+    const journals = [
+      ...orderJournals.filter((j) => j.sourceId === o.id).map((j) => ({ number: j.number, description: j.description, date: j.date.toISOString(), status: j.status })),
+      ...settlementJournals.filter((j) => j.orderId === o.id).map((j) => ({ number: j.number, description: j.description, date: j.date.toISOString(), status: j.status })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    // IDEMPOTENCY:<key> is bookkeeping, not a note for humans
+    const notes =
+      (o.notes ?? "")
+        .split("\n")
+        .filter((l) => l.trim() && !l.startsWith("IDEMPOTENCY:"))
+        .join("\n") || null;
+
     return {
       id: o.id,
       orderNumber: o.orderNumber,
@@ -966,10 +1013,14 @@ export async function listRecentOrdersWithItems(limit = 100) {
       courierId: o.courierId,
       courierName: o.courierId ? courierName.get(o.courierId) ?? null : null,
       waybillNumber: o.waybillNumber,
+      notes,
       items,
       units: items.reduce((s, i) => s + i.quantity, 0),
       // Gross profit = goods revenue (after discount) - cost; delivery charge excluded
       profit: total - Number(o.deliveryCharge) - cogs,
+      cogs,
+      timeline: timelines.get(o.id) ?? [],
+      journals,
     };
   });
 }

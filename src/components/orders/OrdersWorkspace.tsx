@@ -3,7 +3,8 @@
 import React from "react";
 import { QuickSaleForm } from "./QuickSaleForm";
 import { OrdersTable } from "./OrdersTable";
-import { CourierSettlementForm } from "./CourierSettlementForm";
+import { CourierPayoutPanel } from "./CourierPayoutPanel";
+import type { ViewerDocument } from "@/components/evidence/EvidenceViewer";
 import { ToastStack, useToasts } from "./Toasts";
 import {
   bdt,
@@ -25,12 +26,14 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 export function OrdersWorkspace({
   orders,
+  evidence,
   variants,
   couriers,
   payAccounts,
   canWrite,
 }: {
   orders: OrderRow[];
+  evidence: Record<string, ViewerDocument[]>;
   variants: SellableVariant[];
   couriers: CourierOption[];
   payAccounts: PayAccountOption[];
@@ -67,6 +70,21 @@ export function OrdersWorkspace({
         />
       </div>
 
+      <p className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-afk-muted" aria-label="Keyboard shortcuts">
+        {[
+          ["N", "new sale"],
+          ["/", "search orders"],
+          ["B", "board view"],
+          ["L", "list view"],
+          ["Esc", "close panel"],
+        ].map(([key, what]) => (
+          <span key={key} className="inline-flex items-center gap-1.5">
+            <kbd className="rounded border border-afk-border bg-afk-surface px-1.5 py-0.5 font-mono text-afk-secondary">{key}</kbd>
+            {what}
+          </span>
+        ))}
+      </p>
+
       {canWrite ? (
         <QuickSaleForm variants={variants} orders={orders} notify={push} />
       ) : (
@@ -75,10 +93,10 @@ export function OrdersWorkspace({
         </p>
       )}
 
-      <OrdersTable orders={orders} couriers={couriers} payAccounts={payAccounts} notify={push} canWrite={canWrite} />
+      <OrdersTable orders={orders} evidence={evidence} couriers={couriers} payAccounts={payAccounts} notify={push} canWrite={canWrite} />
 
       {canWrite && (
-        <CourierSettlementForm orders={orders} couriers={couriers} payAccounts={payAccounts} notify={push} />
+        <CourierPayoutPanel orders={orders} couriers={couriers} payAccounts={payAccounts} notify={push} />
       )}
 
       <ToastStack toasts={toasts} dismiss={dismiss} />
