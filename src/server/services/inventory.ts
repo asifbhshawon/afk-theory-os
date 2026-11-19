@@ -12,9 +12,11 @@ import {
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { postJournalEntry } from "./finance";
+import { deleteVariant } from "./catalog-admin";
 
 // Re-export pure catalog and SKU utilities
 export { generateColorCode, generateVariantSku } from "@/lib/catalog";
+import { normalizeProductType } from "@/lib/catalog";
 
 // Get aggregate available stock mapped by variant ID
 export async function getInventoryStockMap(): Promise<
@@ -87,7 +89,7 @@ export async function createProductWithVariants(data: {
           name: data.name.trim(),
           styleCode: data.styleCode.trim().toUpperCase(),
           category: data.category.trim(),
-          productType: data.productType || "FINISHED_GARMENT",
+          productType: normalizeProductType(data.productType),
           retailPrice: data.retailPrice.toFixed(2),
           targetCogs: (data.costPrice || 0).toFixed(2),
         })
@@ -146,28 +148,10 @@ export async function createProductWithVariants(data: {
   });
 }
 
-// Safely delete a product variant if it has no transactional history
-export async function deleteProductVariant(variantId: string) {
-  const [lotCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(inventoryLots)
-    .where(eq(inventoryLots.variantId, variantId));
-
-  if (lotCount && lotCount.count > 0) {
-    throw new Error("Cannot delete variant: it has associated inventory lots. Deactivate or deplete lots first.");
-  }
-
-  const [movementCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(stockMovements)
-    .where(eq(stockMovements.variantId, variantId));
-
-  if (movementCount && movementCount.count > 0) {
-    throw new Error("Cannot delete variant: it has recorded stock movement transactions in the ledger.");
-  }
-
-  await db.delete(productVariants).where(eq(productVariants.id, variantId));
-  return { success: true };
+// Delete a SKU only if nothing references it (stock, sales, production, purchasing …).
+// See catalog-admin.ts for the full edit / replace / delete rules.
+export async function deleteProductVariant(variantId: string, userId?: string) {
+  return deleteVariant({ variantId, userId });
 }
 
 // Purchase and receive an inventory lot with GL accounting entry

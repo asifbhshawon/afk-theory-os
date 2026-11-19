@@ -145,7 +145,7 @@ export function CatalogManagerClient({
   const [styleName, setStyleName] = useState("");
   const [styleCode, setStyleCode] = useState("");
   const [category, setCategory] = useState("T-Shirts");
-  const [productType, setProductType] = useState("FINISHED_GOODS");
+  const [productType, setProductType] = useState("FINISHED_GARMENT");
   const [baseRetailPrice, setBaseRetailPrice] = useState("1450");
   const [baseCostPrice, setBaseCostPrice] = useState("420");
 

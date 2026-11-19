@@ -8,6 +8,19 @@ import {
   updateVariantStock,
   bulkUpdateVariantsStock,
 } from "@/server/services/inventory";
+import {
+  updateProductStyle,
+  updateProductVariant,
+  replaceVariant,
+  deleteVariant,
+  deleteStyle,
+  getVariantUsage,
+  getStyleUsage,
+  describeUsage,
+  type UpdateStyleInput,
+  type UpdateVariantInput,
+} from "@/server/services/catalog-admin";
+import { normalizeProductType } from "@/lib/catalog";
 import { revalidatePath } from "next/cache";
 
 export interface SaveProductPayload {
@@ -44,7 +57,7 @@ export async function saveProductStyleAndVariantsAction(payload: SaveProductPayl
       name: payload.name.trim(),
       styleCode: payload.styleCode.trim().toUpperCase(),
       category: payload.category.trim(),
-      productType: payload.productType || "FINISHED_GARMENT",
+      productType: normalizeProductType(payload.productType),
       retailPrice: Number(payload.retailPrice || 0),
       costPrice: Number(payload.costPrice || 0),
       variants: payload.variants.map((v) => ({
@@ -71,22 +84,91 @@ export async function saveProductStyleAndVariantsAction(payload: SaveProductPayl
   }
 }
 
+function refreshCatalog() {
+  revalidatePath("/inventory");
+  revalidatePath("/orders");
+  revalidatePath("/manufacturing");
+  revalidatePath("/");
+}
+
+const CATALOG_ROLES = ["ADMIN", "INVENTORY_MGR"];
+
+function failure(err: unknown, fallback: string) {
+  return { success: false as const, error: err instanceof Error ? err.message : fallback };
+}
+
 export async function deleteVariantAction(variantId: string) {
   try {
-    await requireRole(["ADMIN", "INVENTORY_MGR"]);
-    if (!variantId) {
-      return { success: false, error: "Variant ID is required." };
+    const user = await requireRole(CATALOG_ROLES);
+    if (!variantId) return { success: false as const, error: "SKU is required." };
+    await deleteVariant({ variantId, userId: user.id });
+    refreshCatalog();
+    return { success: true as const };
+  } catch (err) {
+    return failure(err, "Failed to delete SKU.");
+  }
+}
+
+export async function deleteStyleAction(productId: string) {
+  try {
+    const user = await requireRole(CATALOG_ROLES);
+    if (!productId) return { success: false as const, error: "Style is required." };
+    const res = await deleteStyle({ productId, userId: user.id });
+    refreshCatalog();
+    return { success: true as const, deletedVariants: res.deletedVariants };
+  } catch (err) {
+    return failure(err, "Failed to delete style.");
+  }
+}
+
+export async function updateStyleAction(input: Omit<UpdateStyleInput, "userId">) {
+  try {
+    const user = await requireRole(CATALOG_ROLES);
+    const res = await updateProductStyle({ ...input, userId: user.id });
+    refreshCatalog();
+    return { success: true as const, changedVariants: res.changedVariants, skuChanges: res.skuChanges };
+  } catch (err) {
+    return failure(err, "Failed to update style.");
+  }
+}
+
+export async function updateVariantAction(input: Omit<UpdateVariantInput, "userId">) {
+  try {
+    const user = await requireRole(CATALOG_ROLES);
+    const res = await updateProductVariant({ ...input, userId: user.id });
+    refreshCatalog();
+    return { success: true as const, sku: res.sku };
+  } catch (err) {
+    return failure(err, "Failed to update SKU.");
+  }
+}
+
+export async function replaceVariantAction(input: { fromVariantId: string; toVariantId: string }) {
+  try {
+    const user = await requireRole(CATALOG_ROLES);
+    const res = await replaceVariant({ ...input, userId: user.id });
+    refreshCatalog();
+    return { success: true as const, recordsMoved: res.total, from: res.from.sku, to: res.to.sku };
+  } catch (err) {
+    return failure(err, "Failed to replace SKU.");
+  }
+}
+
+/** What would block deleting this SKU / style — shown in the confirmation dialogs. */
+export async function getCatalogUsageAction(input: { variantId?: string; productId?: string }) {
+  try {
+    await requireRole(CATALOG_ROLES);
+    if (input.variantId) {
+      const u = (await getVariantUsage([input.variantId]))[input.variantId];
+      return { success: true as const, canDelete: u.total === 0, summary: describeUsage(u) };
     }
-
-    await deleteProductVariant(variantId);
-
-    revalidatePath("/inventory");
-    revalidatePath("/orders");
-    revalidatePath("/manufacturing");
-
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to delete variant." };
+    if (input.productId) {
+      const u = await getStyleUsage(input.productId);
+      return { success: true as const, canDelete: u.canDelete, summary: u.blockedBy.join("; "), variantCount: u.variantCount };
+    }
+    return { success: false as const, error: "Nothing to check." };
+  } catch (err) {
+    return failure(err, "Could not check usage.");
   }
 }
 

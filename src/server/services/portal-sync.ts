@@ -22,6 +22,7 @@ import {
 import { eq, and, desc, asc, sql, inArray, isNotNull } from "drizzle-orm";
 import { getFinancialStatements } from "./finance";
 import { createHash } from "crypto";
+import { SELLABLE_PRODUCT_TYPES } from "@/lib/catalog";
 
 
 // Extract rich partner settlement & distribution history from posted GL entries
@@ -229,7 +230,7 @@ export async function buildLowStockAlerts(limit = 50) {
     .where(
       and(
         eq(products.status, "ACTIVE"),
-        inArray(products.productType, ["FINISHED_GARMENT", "BLANK"]),
+        inArray(products.productType, SELLABLE_PRODUCT_TYPES),
         // variants flagged "in stock without a count" are intentionally untracked — no alerts
         eq(productVariants.inStockWithoutCount, false)
       )

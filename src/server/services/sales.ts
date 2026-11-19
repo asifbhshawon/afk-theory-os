@@ -17,6 +17,7 @@ import {
 import { eq, and, sql, desc, inArray, like } from "drizzle-orm";
 import { auditLogs, journalEntries } from "@/db/schema";
 import { loadOrderTimelines } from "./order-timeline";
+import { SELLABLE_PRODUCT_TYPES } from "@/lib/catalog";
 import { postJournalEntry } from "./finance";
 import { schedulePortalSync } from "./portal-autosync";
 
@@ -925,7 +926,7 @@ export async function listSellableVariants() {
     .innerJoin(products, eq(productVariants.productId, products.id))
     .leftJoin(inventoryLots, eq(inventoryLots.variantId, productVariants.id))
     .where(
-      and(eq(products.status, "ACTIVE"), inArray(products.productType, ["FINISHED_GARMENT", "BLANK"]))
+      and(eq(products.status, "ACTIVE"), inArray(products.productType, SELLABLE_PRODUCT_TYPES))
     )
     .groupBy(productVariants.id, products.name, products.retailPrice)
     .orderBy(products.name, productVariants.sku);

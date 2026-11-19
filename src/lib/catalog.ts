@@ -34,3 +34,16 @@ export function generateVariantSku(styleCode: string, color: string, size: strin
   const sizeCode = size.trim().toUpperCase().replace(/\s+/g, "");
   return `${cleanStyle}-${colorCode}-${sizeCode}`;
 }
+
+/** Product types whose SKUs are sold to customers (vs raw material / consumables). */
+export const SELLABLE_PRODUCT_TYPES = ["FINISHED_GARMENT", "FINISHED_GOODS", "BLANK"];
+
+/**
+ * The legacy value FINISHED_GOODS was written by an old form default; the schema's
+ * real value is FINISHED_GARMENT. Always store the canonical one.
+ */
+export function normalizeProductType(t?: string | null): string {
+  const v = (t ?? "").trim().toUpperCase();
+  if (!v || v === "FINISHED_GOODS") return "FINISHED_GARMENT";
+  return v;
+}
